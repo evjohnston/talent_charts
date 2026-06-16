@@ -1,0 +1,3580 @@
+title: "GTCI Figures"
+author: "Emerson Johnston"
+---
+
+# Setup
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = FALSE,
+  warning   = FALSE,
+  message   = FALSE,
+  fig.width  = 8.0,
+  fig.height = 5.5,
+  dpi       = 300,
+  fig.align = "center",
+  dev       = "ragg_png"
+)
+
+library(tidyverse)
+library(scales)
+library(showtext)
+library(ggtext)
+library(ggrepel)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(gt)
+library(gtExtras)
+library(webshot2)
+library(magick)
+library(pdftools)
+
+source("R/theme.R")
+source("R/helpers.R")
+source("R/tables.R")
+source("R/chart_layers.R")
+source("R/maps.R")
+```
+
+# Figure 01 - Total STEM Degree Completition in the United States, by Level (1995 - 2024)
+```{r figure 0001}
+meta <- get_meta("fig_001")
+
+df_001 <- read_levels("fig_001", value_col = "Count",
+                      levels_order = c("Doctorate", "Masters", "Bachelors"))
+
+fig_001 <- ggplot(df_001, aes(Year, Count, fill = Level)) +
+  geom_area(alpha = ALPHA_AREA) +
+  scale_x_years(df_001$Year) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = EXPAND_BAR) +
+  scale_y_continuous(breaks = c(250000, 500000, 750000),
+                   labels = label_comma(),
+                   expand = EXPAND_BAR) +
+  scale_fill_levels(reverse_legend = FALSE) +
+  labs_meta(meta, y = "Degrees awarded") +
+  theme_tpa()
+
+save_chart(fig_001, "fig_001")
+```
+
+# Figure 02 - STEM Degrees Awarded as a Share of Total Degrees Awarded - All levels
+```{r figure 002}
+meta <- get_meta("fig_002")
+pct  <- label_percent(accuracy = 1)
+df_002 <- read_levels(
+  "fig_002",
+  value_col    = "Share",
+  levels_order = c("Bachelors", "Masters",
+                   "All Doctorates (IPEDS)")
+) %>%
+  filter(!is.na(Share))
+
+last_002  <- last_by_group(df_002, Year, Level)
+first_002 <- df_002 %>% group_by(Level) %>% slice_min(Year, n = 1) %>% ungroup()
+
+fig_002 <- ggplot(df_002, aes(Year, Share, color = Level, group = Level)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = last_002,
+    mapping      = aes(label = paste0(pct(Share), " - ", Level)),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  geom_label_repel_tpa(
+    data         = first_002,
+    mapping      = aes(label = pct(Share)),
+    nudge_x      = -0.5,
+    hjust        = 1,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_continuous(
+    breaks = seq(min(df_002$Year), max(df_002$Year), 2),
+    expand = expansion(mult = c(0.05, .5))
+  ) +
+  scale_y_continuous(labels = pct, expand = EXPAND_LINE_WIDE) +
+  scale_color_levels() +
+  guides(color = "none") +
+  labs_meta(meta, y = "Share of completions") +
+  theme_tpa()
+save_chart(fig_002, "fig_002")
+```
+
+# Figure 03 - Trends in Research Doctorate Recipients from U.S. Colleges and Universities, All Fields, by Year (1958-2023)
+```{r figure 003}
+meta <- get_meta("fig_003")
+
+df_003 <- read_fig("fig_003") %>%
+  select(Year, value = 2) %>%
+  mutate(across(everything(), as.numeric))
+
+labels_003 <- first_last_peak(df_003, Year, value)
+
+fig_003 <- ggplot(df_003, aes(Year, value)) +
+  geom_line(linewidth = LINE_WIDTH, color = tpa_colors[1]) +
+  geom_label_repel_tpa(
+    data         = labels_003,
+    mapping      = aes(label = fmt_num_k(value)),
+    color        = tpa_colors[1],
+    nudge_y      = 3000,
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_003$Year) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = EXPAND_LINE_TALL) +
+  labs_meta(meta, y = "Doctorate recipients") +
+  theme_tpa()
+
+save_chart(fig_003, "fig_003")
+```
+
+# Figure 04 - Trends in All Research Doctorate Recipients from U.S. Colleges and Universities, by Year and by Broad Science and Engineering Field (2014-2024)
+```{r figure 004}
+meta <- get_meta("fig_004")
+
+df_004 <- read_fig("fig_004") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Field", values_to = "Count") %>%
+  group_by(Field) %>%
+  mutate(baseline = Count[Year == min(Year)],
+         pct_change = (Count / baseline - 1) * 100) %>%
+  ungroup()
+
+fig_004 <- ggplot(df_004, aes(Year, Field, fill = pct_change)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  geom_text(aes(label = sprintf("%+.0f%%", pct_change),
+                color = abs(pct_change) > 10),
+            size = DATA_LABEL_SIZE * 0.8 / .pt,
+            family = FONT_FAMILY) +
+  scale_x_continuous(breaks = seq(min(df_004$Year), max(df_004$Year), 1),
+                   expand = EXPAND_NONE) +
+  scale_y_discrete(expand = EXPAND_NONE) +
+  scale_fill_gradientn(
+    colors = c(tpa_colors[2], HEATMAP_MID, tpa_colors[1]),
+    values = scales::rescale(c(min(df_004$pct_change),
+                               0,
+                               max(df_004$pct_change))),
+    labels = function(x) sprintf("%+.0f%%", x)) +
+  scale_color_manual(values = c("TRUE" = "white", "FALSE" = "grey25"),
+                     guide = "none") +
+  labs_meta(meta, x = NULL, y = NULL) +
+  labs(fill = "% change\nfrom 2014") +
+  theme_heatmap()
+
+save_chart(fig_004, "fig_004")
+```
+
+# Figure 05 - International Student Share of STEM Degree Completions
+```{r figure 005}
+meta <- get_meta("fig_005")
+pct  <- label_percent(accuracy = 1)
+df_005 <- read_levels(
+  "fig_005",
+  value_col    = "Share",
+  levels_order = c("Bachelors", "Masters",
+                   "All Doctorates (IPEDS)", "Research Doctorates (SED)")
+) %>%
+  filter(!is.na(Share))
+
+last_005  <- last_by_group(df_005, Year, Level)
+first_005 <- df_005 %>% group_by(Level) %>% slice_min(Year, n = 1) %>% ungroup()
+
+fig_005 <- ggplot(df_005, aes(Year, Share, color = Level, group = Level)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = last_005,
+    mapping      = aes(label = paste0(pct(Share), ": ", Level)),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  geom_label_repel_tpa(
+    data         = first_005,
+    mapping      = aes(label = pct(Share)),
+    nudge_x      = -0.5,
+    hjust        = 1,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_continuous(
+    breaks = seq(min(df_005$Year), max(df_005$Year), 2),
+    expand = expansion(mult = c(0.05, .5))
+  ) +
+  scale_y_continuous(labels = pct, expand = EXPAND_LINE_WIDE) +
+  scale_color_levels() +
+  guides(color = "none") +
+  labs_meta(meta, y = "Share of completions") +
+  theme_tpa()
+save_chart(fig_005, "fig_005")
+```
+
+# Figure 06 - Share of Degree Completions by U.S. Nonresidents, by Award Level and Field (2003-2023)
+```{r figure 006, fig.height=10, fig.width=10}
+meta <- get_meta("fig_006")
+
+fields_drop <- c(
+  "Agricultural/Animal/Plant/Veterinary Science and Related Fields",
+  "Natural Resources and Conservation",
+  "Architecture and Related Services"
+)
+
+eng_fields <- c(
+  "Engineering",
+  "Engineering/Engineering-Related Technologies/Technicians"
+)
+
+df_006d <- df_006 %>%
+  filter(!Field %in% fields_drop) %>%
+  mutate(Field = if_else(Field %in% eng_fields, "Engineering", Field)) %>%
+  group_by(Field, Degree, Year) %>%
+  summarise(Share = mean(Share, na.rm = TRUE), .groups = "drop")
+
+# first/last year change, by degree, wide across degrees
+first_yr <- min(df_006d$Year)
+last_yr  <- max(df_006d$Year)
+
+tab006d_all <- df_006d %>%
+  filter(Year %in% c(first_yr, last_yr)) %>%
+  pivot_wider(names_from = Year, values_from = Share) %>%
+  rename(FirstYear = !!as.character(first_yr),
+         LastYear  = !!as.character(last_yr)) %>%
+  mutate(PctChangeInShare = (LastYear - FirstYear) / FirstYear * 100)
+
+tab006_wide <- tab006d_all %>%
+  pivot_wider(
+    id_cols     = Field,
+    names_from  = Degree,
+    values_from = c(FirstYear, LastYear, PctChangeInShare),
+    names_glue  = "{Degree}_{.value}"
+  ) %>%
+  select(Field,
+         starts_with("Bachelors_"),
+         starts_with("Masters_"),
+         starts_with("Doctorate_"))
+
+write.csv(tab006_wide, "data/tab_006d.csv", row.names = FALSE)
+
+fig_006 <- ggplot(df_006, aes(Year, Share, color = Degree)) +
+  geom_hline(yintercept = 50, color = tpa_colors[1],
+             linetype = "dashed", linewidth = LINE_WIDTH_REF, alpha = 0.6) +
+  geom_line(linewidth = LINE_WIDTH_DENSE) +
+  geom_point(size = 1) +
+  facet_wrap(~ Field, ncol = 2, scales = "fixed") +
+  scale_x_years(df_006$Year) +
+  scale_y_continuous(limits = c(0, 100),
+                   breaks = c(0, 25, 50, 75, 100),
+                   labels = label_number(suffix = "%"),
+                   expand = EXPAND_NONE) +
+  scale_color_levels() +
+  labs_meta(meta, y = "Nonresident share of completions") +
+  theme_facet()
+
+save_chart(fig_006, "fig_006", size = "long")
+```
+
+# Figure 07 - Projected Annual STEM PhD Production Per 100,000 of the 20- to 34-year-old population, by Country, 2011–2050
+```{r figure 007}
+meta <- get_meta("fig_007")
+
+df_007 <- read_fig("fig_007") %>%
+  pivot_observed_projected() %>%
+  order_by_latest(Country, value)
+
+labels_007 <- last_by_group(df_007, Year, Country)
+proj_start <- proj_start_year(df_007)
+y_max      <- max(df_007$value)
+
+fig_007 <- ggplot(df_007, aes(Year, value, color = Country, group = Country)) +
+  annotate_projected(proj_start, max(df_007$Year),
+                     label_y = y_max * 0.98) +
+  geom_op_lines(df_007) +
+  geom_label_repel_tpa(
+    data    = labels_007,
+    mapping = aes(label = paste0(
+      if_else(Country == "United Kingdom", "United\nKingdom", as.character(Country)),
+      ": ", round(value)
+    )),
+    nudge_x    = 2,
+    hjust      = 0,
+    lineheight = 0.85,
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_007$Year, pad_right = PAD_RIGHT_NARROW) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = EXPAND_LINE) +
+  scale_color_tpa() +
+  guides(color = "none") +
+  labs_meta(meta, y = "STEM PhDs per year") +
+  theme_op()
+
+save_chart(fig_007, "fig_007")
+```
+
+# Figure 08 - Projected Absolute Annual STEM PhD Production by Country, 2011–2050
+```{r figure 008}
+meta <- get_meta("fig_008")
+
+df_008 <- read_fig("fig_008") %>%
+  pivot_observed_projected() %>%
+  order_by_latest(Country, value)
+
+labels_008 <- last_by_group(df_008, Year, Country)
+proj_start <- proj_start_year(df_008)
+y_top      <- y_top_round(df_008$value, 50000)
+
+milestones <- tribble(
+  ~year, ~label,
+  2019, "China Tops US in STEM PhDs",
+  2033, "India Tops US in STEM PhDs",
+  2042, "India Tops China in STEM PhDs, Both now produce 1.5x US",
+  2050, "India Doubles US STEM Production"
+)
+
+fig_008 <- ggplot(df_008, aes(Year, value, color = Country, group = Country)) +
+  annotate_projected(proj_start, max(df_008$Year) + 0.5,
+                     ymax = y_top, label_y = y_top * 0.92) +
+  geom_op_lines(df_008) +
+  annotate_milestones(
+    milestones, y_top,
+    bg_for = \(year) if_else(year >= proj_start, "grey94", "white")
+  ) +
+  geom_label_repel_tpa(
+    data         = labels_008,
+    mapping      = aes(label = Country),
+    nudge_x      = 2,
+    hjust        = 0,
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_008$Year, pad_right = PAD_RIGHT_NARROW) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = EXPAND_LINE) +
+  scale_color_tpa() +
+  guides(color = "none") +
+  labs_meta(meta, y = "STEM PhDs per year") +
+  theme_op()
+
+save_chart(fig_008, "fig_008")
+```
+
+# Figure 09 - International Students in US Higher Education - Total Enrollment and Share, 1949-2025
+```{r figure 009}
+meta <- get_meta("fig_009")
+
+df_009 <- read_fig("fig_009") %>%
+  rename(Year = 1, Total = 2, Share = 3) %>%
+  mutate(across(everything(), as.numeric),
+         Share = fill_gaps(Year, Share))
+
+scale_factor <- dual_axis_scale(
+  primary_max   = max(df_009$Total, na.rm = TRUE),
+  secondary_max = 0.07
+)
+
+fig_009 <- ggplot(df_009, aes(Year)) +
+  geom_col(aes(y = Total, fill = "Total"),
+           width = 0.7, alpha = ALPHA_COL_LIGHT) +
+  geom_line(aes(y = Share * scale_factor, color = "Share"),
+            linewidth = LINE_WIDTH, na.rm = TRUE) +
+  scale_x_years(df_009$Year) +
+  scale_y_continuous(
+    name   = "Count of international students",
+    labels = label_comma(),
+    expand = EXPAND_BAR,
+    sec.axis = sec_axis_scaled(scale_factor,
+                               name   = "Share of total US enrollment",
+                               labels = label_percent(accuracy = 1))
+  ) +
+  scale_fill_manual(name = NULL, values = c("Total" = tpa_colors[2])) +
+  scale_color_manual(name = NULL, values = c("Share" = tpa_colors[1])) +
+  labs_meta(meta) +
+  theme_dual_axis()
+
+save_chart(fig_009, "fig_009")
+```
+
+# Figure 10 - Economic Contributions of International Students to the U.S. Economy, 1999-2024
+```{r figure 010}
+meta <- get_meta("fig_010")
+
+df_010 <- read_fig("fig_010") %>%
+  rename(value = 2) %>%
+  mutate(Year  = as.numeric(Year),
+         value = as.numeric(value) / 1e9)
+
+labels <- first_last_peak(df_010, Year, value)
+
+fig_010 <- ggplot(df_010, aes(Year, value)) +
+  geom_col(fill = tpa_colors[1], width = 0.7, alpha = ALPHA_COL) +
+  geom_text_tpa(data    = labels,
+                mapping = aes(label = sprintf("%.2f", value)),
+                color   = tpa_colors[1]) +
+  scale_x_years(df_010$Year, by = 1) +
+  scale_y_continuous(labels = label_dollar(suffix = "B"),
+                     expand = EXPAND_BAR_TALL) +
+  labs_meta(meta, y = "USD (billions)") +
+  theme_tpa()
+
+save_chart(fig_010, "fig_010")
+```
+
+# Figure 11 - International Students in STEM in US Higher Education - Total Enrollment and Share, 1998-2024
+```{r figure 011}
+meta <- get_meta("fig_011")
+
+df_011 <- read_fig("fig_011") %>%
+  rename(
+    Year           = 1,
+    Total          = 2,
+    STEM           = 3,
+    SocialSci      = 4,
+    STEM_Share     = 5,
+    Combined_Share = 6
+  ) %>%
+  mutate(across(everything(), as.numeric))
+
+df_bars <- df_011 %>%
+  select(Year, STEM, SocialSci) %>%
+  pivot_longer(-Year, names_to = "Category", values_to = "Count") %>%
+  order_by_total(Category, Count) %>%
+  mutate(Category = fct_recode(Category, "Social Science" = "SocialSci"))
+
+df_lines <- df_011 %>%
+  select(Year, STEM_Share, Combined_Share) %>%
+  pivot_longer(-Year, names_to = "ShareType", values_to = "Share") %>%
+  order_by_total(ShareType, Share) %>%
+  mutate(ShareType = fct_recode(ShareType,
+                                "STEM share"                 = "STEM_Share",
+                                "STEM + Social Science share" = "Combined_Share"))
+
+labels_lines <- fl_by_group(df_lines, Year, Share, ShareType)
+
+scale_factor <- dual_axis_scale(primary_max = 800000, secondary_max = 0.60)
+
+fig_011 <- ggplot() +
+  geom_col(data = df_bars,
+           aes(Year, Count, fill = Category),
+           width = 0.7, alpha = ALPHA_COL) +
+  geom_line(data    = df_lines,
+            aes(Year, Share * scale_factor, color = ShareType),
+            linewidth = LINE_WIDTH) +
+  geom_text(data = labels_lines,
+            aes(Year, Share * scale_factor,
+                label = label_percent(accuracy = 1)(Share),
+                color = ShareType),
+            vjust       = -0.9,
+            size        = DATA_LABEL_SIZE / .pt,
+            fontface    = "bold",
+            family      = FONT_FAMILY,
+            show.legend = FALSE) +
+  scale_x_years(df_011$Year, by = 1, pad_right = PAD_RIGHT_TIGHT) +
+  scale_y_continuous(
+    name   = "International student enrollments",
+    labels = label_comma(),
+    expand = EXPAND_BAR_TALL,
+    sec.axis = sec_axis_scaled(scale_factor,
+                               name   = "Share of total international enrollment",
+                               labels = label_percent(accuracy = 1))
+  ) +
+  scale_fill_stacked(n = 2, ordinal = TRUE) +
+  scale_color_stacked(n = 2, ordinal = TRUE) +
+  labs_meta(meta) +
+  theme_dual_axis()
+
+save_chart(fig_011, "fig_011")
+```
+
+# Figure 12 - Trends in Regional Distribution of International Students in the United States, 1999/2000 – 2024/25
+```{r figure 012}
+meta <- get_meta("fig_012")
+
+df_012 <- read_fig("fig_012") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Region", values_to = "Count") %>%
+  filter(!is.na(Count),
+         !Region %in% c("Stateless", "Percent Asia")) %>%
+  order_by_total(Region, Count)
+
+asia_labels <- df_012 %>%
+  group_by(Year) %>%
+  mutate(share = Count / sum(Count)) %>%
+  ungroup() %>%
+  filter(Region == "Asia") %>%
+  filter(Year %in% range(Year))
+
+fig_012 <- ggplot(df_012, aes(Year, Count, fill = Region)) +
+  geom_area(alpha = ALPHA_AREA) +
+  geom_text(
+    data = asia_labels,
+    aes(Year, Count * .87,
+        label = label_percent(accuracy = 1)(share),
+        hjust = if_else(Year == min(Year), 0, 1)),
+    nudge_x     = c(0.3, -0.3),
+    color       = "white",
+    fontface    = "bold",
+    family      = FONT_FAMILY,
+    size        = DATA_LABEL_SIZE / .pt,
+    inherit.aes = FALSE
+  ) +
+  scale_x_years(df_012$Year, by = 1) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = EXPAND_BAR) +
+  scale_fill_stacked(n = 7) +
+  labs_meta(meta, y = "International students enrolled") +
+  theme_tpa()
+
+save_chart(fig_012, "fig_012")
+```
+
+# Figure 13 - Trends in International Student Enrollment in STEM Fields in U.S. Higher Education, by Country (2009–2024)
+```{r figure 013}
+meta <- get_meta("fig_013")
+
+df_013 <- read_fig("fig_013") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Country", values_to = "Count") %>%
+  filter(!is.na(Count))
+
+top_countries <- df_013 %>%
+  filter(Year == max(Year)) %>%
+  slice_max(Count, n = 6) %>%
+  pull(Country)
+
+df_013 <- df_013 %>%
+  filter(Country %in% top_countries) %>%
+  order_by_latest(Country, Count)
+
+labels_013 <- last_by_group(df_013, Year, Country)
+
+fig_013 <- ggplot(df_013, aes(Year, Count, color = Country, group = Country)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_013,
+    mapping      = aes(label = paste0(Country, ": ", label_comma()(Count))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_013$Year, pad_right = PAD_RIGHT_NARROW) +
+  scale_y_log10(labels = label_comma(),
+                breaks = c(1000, 5000, 10000, 50000, 100000, 250000),
+                expand = EXPAND_LINE) +
+  scale_color_tpa() +
+  guides(color = "none") +
+  labs_meta(meta, y = "Enrolled students (log scale)") +
+  theme_tpa()
+
+save_chart(fig_013, "fig_013")
+```
+
+# Figure 14 - Trends in International Student Enrollment in STEM Fields in U.S. Higher Education, by Broad STEM Field (2009–2024)
+```{r figure 014}
+meta <- get_meta("fig_014")
+
+df_014 <- read_fig("fig_014") %>%
+  select(-`Non STEM`) %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Field", values_to = "Count") %>%
+  filter(!is.na(Count)) %>%
+  order_by_latest(Field, Count)
+
+labels_014 <- last_by_group(df_014, Year, Field)
+
+fig_014 <- ggplot(df_014, aes(Year, Count, color = Field, group = Field)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_014,
+    mapping      = aes(label = paste0(Field, ": ", label_comma()(Count))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_014$Year, pad_right = PAD_RIGHT_WIDE) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = EXPAND_LINE) +
+  scale_color_tpa() +
+  guides(color = "none") +
+  labs_meta(meta, y = "Enrolled students") +
+  theme_tpa()
+
+save_chart(fig_014, "fig_014")
+```
+
+# Figure 15 - Trends in Graduate Students in Science, by Year and by Citizenship Status (1997-2023)
+```{r figure 015}
+meta <- get_meta("fig_015")
+df   <- read_citizenship_area("fig_015")
+fig  <- plot_citizenship_area(df, meta, "Graduate students enrolled")
+save_chart(fig, "fig_015")
+```
+
+# Figure 16 - Trends in Graduate Students Engineering, by Year and by Citizenship Status (1997-2023)
+```{r figure 016}
+meta <- get_meta("fig_016")
+df   <- read_citizenship_area("fig_016")
+fig  <- plot_citizenship_area(df, meta, "Graduate students enrolled")
+save_chart(fig, "fig_016")
+```
+
+# Figure 17 - Trends in Graduate Students in Health, by Citizenship Status (1997-2023)
+```{r figure 017}
+meta <- get_meta("fig_017")
+df   <- read_citizenship_area("fig_017")
+fig  <- plot_citizenship_area(df, meta, "Graduate students enrolled")
+save_chart(fig, "fig_017")
+```
+
+# Figure 18 - Trends in US Citizen Research Doctorate Recipients from U.S. Colleges and Universities, by Year and by Broad Science and Engineering Field (2013-2023)
+```{r figure 018}
+meta <- get_meta("fig_018")
+df   <- read_country_lines("fig_018", group_col = "Field", value_col = "Count")
+fig  <- plot_country_lines(df, meta, "Doctorate recipients",
+                           group_col   = "Field",
+                           color_scale = scale_color_fields())
+save_chart(fig, "fig_018")
+```
+
+# Figure 19 - Trends in Temporary Visa Holder Research Doctorate Recipients from U.S. Colleges and Universities, by Year and by Broad Science and Engineering Field (2013-2023)
+```{r figure 019}
+meta <- get_meta("fig_019")
+df   <- read_country_lines("fig_019", group_col = "Field", value_col = "Count") %>%
+  filter(!is.na(Year))
+fig  <- plot_country_lines(df, meta, "Doctorate recipients",
+                           group_col   = "Field",
+                           color_scale = scale_color_fields(),
+                           pad_right   = PAD_RIGHT_STANDARD)
+save_chart(fig, "fig_019")
+```
+
+# Figure 20 - International Postdoctoral Representation by Field, 1980–2023
+```{r figure 020}
+meta <- get_meta("fig_020")
+
+df_020 <- read_fig("fig_020") %>%
+  rename(Year = 1,
+         Science     = 2,
+         Engineering = 3,
+         Health      = 4) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Field", values_to = "Share") %>%
+  filter(!is.na(Share)) %>%
+  order_by_latest(Field, Share)
+
+labels_020 <- last_by_group(df_020, Year, Field)
+
+fig_020 <- ggplot(df_020, aes(Year, Share, color = Field, group = Field)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_020,
+    mapping      = aes(label = paste0(Field, ": ", sprintf("%.1f%%", Share))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_020$Year, pad_right = PAD_RIGHT_NARROW) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(0, 80),
+                     breaks = seq(0, 80, 10),
+                     expand = EXPAND_BAR_TIGHT) +
+  scale_color_tpa() +
+  guides(color = "none") +
+  labs_meta(meta, y = "International share of postdocs") +
+  theme_tpa()
+
+save_chart(fig_020, "fig_020")
+```
+
+# Figure 21 - Trends in Postdocs at Federally Funded Research and Development Centers, by Citizenship (2012-2023)
+```{r figure 021}
+meta <- get_meta("fig_021")
+
+df_021 <- read_fig("fig_021") %>%
+  rename(Year = 1,
+         `U.S. citizens and permanent residents` = 2,
+         `Temporary visa holders`                = 3) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Status", values_to = "Count") %>%
+  filter(!is.na(Year), !is.na(Count)) %>%
+  order_by_latest(Status, Count)
+
+labels_021 <- df_021 %>%
+  nudge_by_series(Status,
+                  above  = "Temporary visa holders",
+                  amount = 120)
+
+fig_021 <- ggplot(df_021, aes(Year, Count, color = Status, group = Status)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_point(size = 2) +
+  geom_label_repel_tpa(
+    data         = labels_021,
+    mapping      = aes(label = label_comma()(Count)),
+    nudge_y      = labels_021$nudge_y,
+    direction    = "y",
+    with_segment = FALSE
+  ) +
+  scale_x_years(df_021$Year, by = 1, pad_right = PAD_RIGHT_TIGHT) +
+  scale_y_continuous(labels = label_comma(),
+                     limits = c(0, 2500),
+                     breaks = seq(0, 2500, 500),
+                     expand = EXPAND_BAR_TIGHT) +
+  scale_color_manual(values = citizenship_colors_alt) +
+  labs_meta(meta, y = "Postdoctoral researchers") +
+  theme_tpa()
+
+save_chart(fig_021, "fig_021")
+```
+
+# Figure 22 - Trends in International Scholars Working in the United States, by Year (1954/55-2023/24)
+```{r figure 022}
+meta <- get_meta("fig_022")
+df   <- read_discrete_bar("fig_022")
+fig  <- plot_discrete_bar(df, meta, "International scholars",
+                          label_fn = label_comma())
+save_chart(fig, "fig_022")
+```
+
+# Figure 23 - Trends in International Scholars, by Year and by World Region of Origin (2000/01-2023/24)
+```{r figure 023}
+meta <- get_meta("fig_023")
+df   <- read_country_lines("fig_023", group_col = "Region", value_col = "Count") %>%
+  filter(Region != "Stateless")
+fig  <- plot_country_lines(df, meta, "International scholars",
+                           group_col = "Region",
+                           pad_right = PAD_RIGHT_STANDARD)
+save_chart(fig, "fig_023")
+```
+
+# Figure 24 - Distribution of Major Field of Specialization of International Scholars Working in the United States (2013/2014—2023/24)
+```{r figure 024}
+meta <- get_meta("fig_024")
+
+fields_keep <- c("Agriculture", "Engineering", "Health professions",
+                 "Math and computer science", "Physical and life sciences",
+                 "Social sciences", "Non-STEM")
+
+df_024 <- read_fig("fig_024") %>%
+  rename(Year = 1) %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Field", values_to = "Count") %>%
+  filter(!is.na(Year), !is.na(Count), Field %in% fields_keep) %>%
+  mutate(Field = factor(Field, levels = rev(fields_keep)))
+
+fig_024 <- ggplot(df_024, aes(Year, Count, fill = Field)) +
+  geom_col(width = 0.7, alpha = ALPHA_COL) +
+  scale_x_years(df_024$Year, by = 1) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = EXPAND_BAR) +
+  scale_fill_manual(values = stem_gradient_colors) +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  labs_meta(meta, y = "International scholars") +
+  theme_tpa()
+
+save_chart(fig_024, "fig_024")
+```
+
+# Figure 25 - Distribution of Citizenship Status in Demographic Characteristics for U.S. Population Ages 16–75, by U.S. STEM Labor Force Status and by Citizenship Status (2022)
+```{r figure 025}
+meta <- get_meta("fig_025")
+
+status_order <- c(
+  "Employed in the U.S. Labor Force in a STEM Occupation Directed Related to Science and Engineering",
+  "Employed in the U.S. Labor Force in a STEM Occupation Indirectly Related to Science and Engineering",
+  "Employed in the U.S. Labor Force in a STEM Occupation with a STEM middle skill",
+  "Employed in the U.S. Labor Force in a non-STEM Occupation",
+  "Unemployed in the U.S. Labor Force",
+  "Not in the U.S. labor force",
+  "Total"
+)
+
+df_025 <- read_fig("fig_025") %>%
+  mutate(
+    total_n                              = US_citizen + TPV,
+    `U.S. citizen or permanent resident` = US_citizen / total_n,
+    `Temporary visa holder`              = TPV / total_n
+  ) %>%
+  select(Category,
+         `U.S. citizen or permanent resident`,
+         `Temporary visa holder`) %>%
+  pivot_longer(-Category, names_to = "Citizenship", values_to = "Share") %>%
+  mutate(
+    Category    = factor(Category, levels = rev(status_order)),
+    Citizenship = factor(Citizenship,
+                         levels = c("U.S. citizen or permanent resident",
+                                    "Temporary visa holder"))
+  ) %>%
+  arrange(Category, Citizenship) %>%
+  group_by(Category) %>%
+  mutate(
+    x_end   = cumsum(Share),
+    x_start = x_end - Share,
+    x_mid   = (x_start + x_end) / 2
+  ) %>%
+  ungroup()
+
+palette_025 <- c(
+  "U.S. citizen or permanent resident" = tpa_colors[2],
+  "Temporary visa holder"              = tpa_colors[1]
+)
+
+bar_height <- 0.35
+
+fig_025 <- ggplot(df_025) +
+  geom_rect(aes(
+    xmin = x_start,
+    xmax = x_end,
+    ymin = as.numeric(Category) - bar_height,
+    ymax = as.numeric(Category) + bar_height,
+    fill = Citizenship
+  )) +
+  geom_text(
+    data     = filter(df_025, Citizenship == "Temporary visa holder"),
+    aes(x = x_mid, y = as.numeric(Category),
+        label = label_percent(accuracy = 1)(Share)),
+    color    = "white",
+    fontface = "bold",
+    family   = FONT_FAMILY,
+    size     = DATA_LABEL_SIZE / .pt
+  ) +
+  scale_x_continuous(
+    labels = label_percent(accuracy = 1),
+    breaks = seq(0.84, 1, 0.02),
+    limits = c(0.84, 1),
+    oob    = scales::oob_keep,
+    expand = expansion(mult = c(0, 0))
+  ) +
+  scale_y_continuous(
+    breaks = seq_along(levels(df_025$Category)),
+    labels = label_wrap_gen(40)(levels(df_025$Category)),
+    expand = expansion(add = c(0.5, 0.5))
+  ) +
+  scale_fill_manual(values = palette_025) +
+  labs_meta(meta) +
+  theme_horizontal_bar()
+
+save_chart(fig_025, "fig_025")
+```
+
+# Figure 26 - Temporary Visa Holder Share of Employment by Detailed STEM Occupation, 2023
+```{r figure 026}
+meta <- get_meta("fig_026")
+
+df_026 <- read_fig("fig_026") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Occupation", values_to = "Rate") %>%
+  filter(!is.na(Rate)) %>%
+  mutate(Rate = Rate * 100) %>%
+  order_by_latest(Occupation, Rate)
+
+labels_026 <- last_by_group(df_026, Year, Occupation) %>%
+  mutate(label = paste0(str_wrap(Occupation, 24), ": ", fmt_pct_1(Rate)))
+
+fig_026 <- ggplot(df_026, aes(Year, Rate, color = Occupation, group = Occupation)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_026,
+    mapping      = aes(label = label),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    lineheight   = 0.85,
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_026$Year, by = 2, pad_right = PAD_RIGHT_XWIDE) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(0, 20),
+                     breaks = seq(0, 20, 5),
+                     expand = EXPAND_BAR_TIGHT) +
+  scale_color_tpa() +
+  guides(color = "none") +
+  labs_meta(meta, y = "Conversion rate") +
+  theme_tpa()
+
+save_chart(fig_026, "fig_026")
+```
+
+# Figure 27 - Employment in STEM occupations by degree level, us citizens college graduates
+```{r figure 027}
+meta <- get_meta("fig_027")
+
+level_order <- c("Doctorates", "Professional", "Masters", "Bachelors")
+
+df_027 <- read_fig("fig_027") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Level", values_to = "Share") %>%
+  filter(!is.na(Share)) %>%
+  mutate(
+    Share = Share * 100,
+    Level = str_to_title(Level),
+    Level = factor(Level, levels = level_order)
+  )
+
+labels_027 <- last_by_group(df_027, Year, Level)
+
+fig_027 <- ggplot(df_027, aes(Year, Share, color = Level, group = Level)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_027,
+    mapping      = aes(label = paste0(Level, ": ", fmt_pct_1(Share))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_027$Year, pad_right = PAD_RIGHT_STANDARD) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(20, 60),
+                     breaks = seq(0, 70, 10),
+                     expand = EXPAND_BAR_TIGHT) +
+  scale_color_manual(values = degree_employment_colors) +
+  guides(color = "none") +
+  labs_meta(meta, y = "Share employed in STEM") +
+  theme_tpa()
+
+save_chart(fig_027, "fig_027")
+```
+
+# Figure 28 - Employment in STEM occupations by degree level, foreign born college graduates
+```{r figure 028}
+meta <- get_meta("fig_028")
+
+level_order <- c("Doctorates", "Professional", "Masters", "Bachelors")
+
+df_028 <- read_fig("fig_028") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Level", values_to = "Share") %>%
+  filter(!is.na(Share)) %>%
+  mutate(
+    Share = Share * 100,
+    Level = str_to_title(Level),
+    Level = factor(Level, levels = level_order)
+  )
+
+labels_028 <- last_by_group(df_028, Year, Level)
+
+fig_028 <- ggplot(df_028, aes(Year, Share, color = Level, group = Level)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_028,
+    mapping      = aes(label = paste0(Level, ": ", fmt_pct_1(Share))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_028$Year, pad_right = PAD_RIGHT_STANDARD) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(20, 80),
+                     breaks = seq(0, 80, 10),
+                     expand = EXPAND_BAR_TIGHT) +
+  scale_color_manual(values = degree_employment_colors) +
+  guides(color = "none") +
+  labs_meta(meta, y = "Share employed in STEM") +
+  theme_tpa()
+
+save_chart(fig_028, "fig_028")
+```
+
+# Figure 29 - STEM Degree-to-STEM job Conversion Rates (2017-2023)
+```{r figure 029}
+meta <- get_meta("fig_029")
+
+df_029 <- read_fig("fig_029") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Level", values_to = "Share") %>%
+  filter(!is.na(Share)) %>%
+  mutate(
+    Share = Share * 100,
+    Level = case_when(
+      str_detect(Level, regex("bach", ignore_case = TRUE)) ~ "Bachelors",
+      str_detect(Level, regex("mast", ignore_case = TRUE)) ~ "Masters",
+      str_detect(Level, regex("doct", ignore_case = TRUE)) ~ "Doctorate"
+    ),
+    Level = factor(Level, levels = c("Bachelors", "Masters", "Doctorate"))
+  )
+
+fig_029 <- ggplot(df_029, aes(factor(Year), Share, fill = Level)) +
+  geom_col_grouped() +
+  geom_text(aes(label = fmt_pct_1(Share)),
+            position = pos_dodge_grouped(),
+            vjust = -0.6,
+            size = DATA_LABEL_SIZE / .pt,
+            fontface = "bold",
+            family = FONT_FAMILY,
+            color = "grey25") +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(0, 60),
+                     breaks = seq(0, 60, 10),
+                     expand = EXPAND_TIGHT_TOP) +
+  scale_fill_levels() +
+  labs_meta(meta, y = "Share employed in STEM") +
+  theme_tpa() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+save_chart(fig_029, "fig_029")
+```
+
+# Figure 30 - Top 15 Employers with NAICS Code 54 H-1B Visa Approvals
+```{r figure 030}
+meta <- get_meta("fig_030")
+
+df_030 <- read_fig("fig_030") %>%
+  select(1:11) %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Company", values_to = "Count") %>%
+  filter(!is.na(Count)) %>%
+  order_by_latest(Company, Count)
+
+palette_030 <- c(tpa_colors, "grey40")
+
+fig_030 <- ggplot(df_030, aes(Year, Count, color = Company, group = Company)) +
+  geom_line(linewidth = LINE_WIDTH_DENSE) +
+  scale_x_years(df_030$Year, by = 2) +
+  scale_y_log10(labels = label_comma(),
+                breaks  = c(100, 500, 1000, 5000, 10000, 30000),
+                expand  = EXPAND_LINE) +
+  scale_color_manual(values = palette_030) +
+  guides(color = guide_legend(ncol = 3)) +
+  labs_meta(meta, y = "H-1B approvals") +
+  theme_tpa()
+
+save_chart(fig_030, "fig_030")
+```
+
+# Figure 31 - The Evolving Founder Demographics of the US-Based Forbes AI 50 Companies (2019–2025)
+```{r figure 031}
+meta <- get_meta("fig_031")
+
+df_031 <- read_fig("fig_031") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Composition", values_to = "Share") %>%
+  filter(!is.na(Share)) %>%
+  mutate(
+    Share       = Share * 100,
+    Composition = case_when(
+      Composition == "all us"       ~ "All U.S.",
+      Composition == "all foreign"  ~ "All foreign",
+      Composition == "some foreign" ~ "Some foreign"
+    )
+  ) %>%
+  order_by_latest(Composition, Share)
+
+palette_031 <- c(
+  "All U.S."     = tpa_colors[1],
+  "All foreign"  = tpa_colors[2],
+  "Some foreign" = tpa_colors[4]
+)
+
+labels_031 <- last_by_group(df_031, Year, Composition)
+
+fig_031 <- ggplot(df_031, aes(Year, Share, color = Composition, group = Composition)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_point(size = POINT_SIZE) +
+  geom_label_repel_tpa(
+    data         = labels_031,
+    mapping      = aes(label = paste0(Composition, ": ", fmt_pct_1(Share))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_031$Year, by = 1, pad_right = PAD_RIGHT_STANDARD) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(20, 50),
+                     breaks = seq(0, 50, 10),
+                     expand = EXPAND_BAR_TIGHT) +
+  scale_color_manual(values = palette_031) +
+  guides(color = "none") +
+  labs_meta(meta, y = "Share of Forbes AI 50") +
+  theme_tpa()
+
+save_chart(fig_031, "fig_031")
+```
+
+# Figure 32 - Countries of Origin for Foreign Founders of U.S.-Based AI Companies Ranked in the Forbes AI5o (2019-2025)
+```{r figure 032}
+meta <- get_meta("fig_032")
+
+df_032 <- read_fig("fig_032") %>%
+  rename(Country = 1, Count = 2) %>%
+  mutate(
+    Count = as.numeric(Count),
+    Country = case_when(
+      Country == "the Netherlands"     ~ "Netherlands",
+      Country == "United Arab Emirates" ~ "United Arab Emirates",
+      Country == "Scotland"             ~ "United Kingdom",
+      Country == "Hong Kong"            ~ "Hong Kong S.A.R.",
+      TRUE                              ~ Country
+    )
+  ) %>%
+  group_by(Country) %>%
+  summarise(Count = sum(Count, na.rm = TRUE), .groups = "drop")
+
+world_032 <- join_country_data(df_032)
+
+fig_032 <- ggplot(world_032) +
+  geom_sf(aes(fill = Count), color = "white", linewidth = 0.2) +
+  geom_country_labels(world_032, value_col = "Count", min_value = 5) +
+  scale_fill_gradient(
+    low = TPA_RED_LIGHT,
+    high = tpa_colors[1],
+    na.value = "grey92",
+    breaks = c(1, 20, 40, 60, 76),
+    labels = label_comma(),
+    name = "Founders"
+  ) +
+  coord_sf(crs = "+proj=robin", expand = FALSE) +
+  labs_meta(meta) +
+  theme_map()
+
+save_chart(fig_032, "fig_032")
+```
+
+# Figure 33 - Founder Composition and Valuation of Forbes AI50 Startups
+```{r figure 033}
+meta <- get_meta("fig_033")
+
+raw_033 <- read_fig("fig_033")
+
+foreign_block <- raw_033 %>%
+  select(Company,
+         Year      = `Year Founded`,
+         Founders  = `No of Founders`,
+         Valuation = `Pitchbook Valuation`,
+         Group     = `Founder Makeup Binary`) %>%
+  filter(!is.na(Year))
+
+domestic_block <- raw_033 %>%
+  select(Company,
+         Year      = `Year Founded.1`,
+         Founders  = `No of Founders.1`,
+         Valuation = `Pitchbook Valuation.1`,
+         Group     = `Founder Makeup Binary.1`) %>%
+  filter(!is.na(Year))
+
+df_033 <- bind_rows(foreign_block, domestic_block) %>%
+  mutate(
+    Year      = as.integer(Year),
+    Founders  = as.numeric(Founders),
+    Valuation = as.numeric(Valuation) / 1e6,
+    Group     = case_when(
+      str_detect(Group, "Has a Confirmed")  ~ "Foreign founder or co-founder",
+      str_detect(Group, "Has No Confirmed") ~ "No foreign founder or co-founder"
+    )
+  ) %>%
+  filter(!is.na(Valuation))
+
+fig_033 <- ggplot(df_033, aes(Year, Valuation,
+                              size = Founders, fill = Group)) +
+  geom_point(shape = 21, color = "white", stroke = 0.3,
+             alpha = ALPHA_BUBBLE) +
+  scale_x_continuous(breaks = seq(2003, 2025, 2),
+                     expand = expansion(mult = c(0.02, 0.02))) +
+  scale_y_log10(labels = label_comma(),
+                breaks  = c(10, 100, 1000, 10000, 100000, 500000),
+                expand  = expansion(mult = c(0.05, 0.15))) +
+  scale_size_area(max_size = 16, breaks = c(1, 3, 5, 8, 11),
+                  name = "Founders") +
+  scale_fill_manual(values = c(
+    "Foreign founder or co-founder"    = tpa_colors[2],
+    "No foreign founder or co-founder" = tpa_colors[1]
+  ), name = NULL) +
+  guides(
+    fill = guide_legend(
+      override.aes = list(size = 5, alpha = 1, shape = 21, color = "white"),
+      order = 1
+    ),
+    size = guide_legend(
+      override.aes = list(shape = 21, fill = "grey50",
+                          color = "white", alpha = ALPHA_BUBBLE),
+      order = 2
+    )
+  ) +
+  coord_cartesian(clip = "off") +
+  labs_meta(meta, y = "Valuation (USD, millions, log scale)") +
+  theme_tpa() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+save_chart(fig_033, "fig_033")
+```
+
+# Figure 34 - Geographic Affiliation Distribution of Research Paper Authors from Top AI Companies (2025)
+```{r figure 034}
+meta <- get_meta("fig_034")
+
+company_order <- c("DeepSeek", "Anthropic", "OpenAI", "DeepMind")
+category_order <- c("Competitor", "International", "Domestic")
+
+df_034 <- read_fig("fig_034") %>%
+  rename(Company = 1) %>%
+  pivot_longer(-Company, names_to = "Affiliation", values_to = "Share") %>%
+  mutate(
+    Share = as.numeric(Share) * 100,
+    Affiliation = str_remove(Affiliation, "^Current Affiliation - ?"),
+    Affiliation = factor(Affiliation, levels = category_order),
+    Company = factor(Company, levels = company_order)
+  )
+
+palette_034 <- c(
+  "Domestic"      = tpa_colors[2],
+  "International" = tpa_colors[1],
+  "Competitor"    = tpa_colors[3]
+)
+
+fig_034 <- ggplot(df_034, aes(Share, Company, fill = Affiliation)) +
+  geom_col(width = BAR_WIDTH_NARROW, alpha = ALPHA_COL) +
+  geom_text(aes(label = fmt_pct_0(Share)),
+            position = position_stack(vjust = 0.5),
+            color = "white",
+            fontface = "bold",
+            family = FONT_FAMILY,
+            size = DATA_LABEL_SIZE / .pt) +
+  scale_x_continuous(labels = label_number(suffix = "%"),
+                     breaks = seq(0, 100, 10),
+                     limits = c(0, 101),
+                     expand = expansion(mult = c(0, 0))) +
+  scale_fill_manual(values = palette_034,
+                    breaks = c("Domestic", "International", "Competitor")) +
+  labs_meta(meta, x = "Share of researchers") +
+  theme_horizontal_bar()
+
+save_chart(fig_034, "fig_034")
+```
+
+# Figure 35 - US PISA Scores Compared to China and OECD Average
+```{r figure 035}
+meta <- get_meta("fig_035")
+
+subject_order <- c("Reading", "Science", "Math")
+
+df_035 <- read_fig("fig_035") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Subject", values_to = "Score") %>%
+  filter(!is.na(Score)) %>%
+  mutate(Subject = factor(Subject, levels = subject_order))
+
+palette_035 <- c(
+  "Reading" = tpa_colors[1],   # red
+  "Science" = tpa_colors[4],   # green
+  "Math"    = tpa_colors[2]    # navy
+)
+
+fig_035 <- ggplot(df_035, aes(Year, Score, color = Subject, group = Subject)) +
+  geom_hline(yintercept = 0, color = "grey50", linewidth = LINE_WIDTH_REF) +
+  geom_trend() +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_point(size = 2) +
+  geom_text(aes(label = sprintf("%+d", Score)),
+            vjust = -1.1,
+            size = DATA_LABEL_SIZE / .pt,
+            fontface = "bold",
+            family = FONT_FAMILY,
+            show.legend = FALSE) +
+  scale_x_continuous(breaks = unique(df_035$Year),
+                     expand = expansion(mult = c(0.03, 0.03))) +
+  scale_y_continuous(limits = c(-20, 32),
+                     breaks = seq(-20, 30, 5),
+                     expand = expansion(mult = c(0.02, 0.05))) +
+  scale_color_manual(values = palette_035) +
+  labs_meta(meta, y = "Score change from PISA baseline") +
+  theme_tpa() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+save_chart(fig_035, "fig_035")
+```
+
+# Figure 36 - K-12 Education Expenditure - % of GDP and per pupil
+```{r figure 036}
+meta <- get_meta("fig_036")
+
+df_036 <- read_fig("fig_036") %>%
+  rename(
+    Year       = 1,
+    GDP_share  = 2,
+    Per_pupil  = 3
+  ) %>%
+  mutate(
+    Year      = as.numeric(Year),
+    GDP_share = as.numeric(GDP_share),
+    Per_pupil = parse_number(as.character(Per_pupil))
+  )
+
+primary_range   <- c(12500, 16500)
+secondary_range <- c(4.5, 5.5)
+
+scale_factor <- diff(primary_range) / diff(secondary_range)
+shift        <- primary_range[1] - secondary_range[1] * scale_factor
+
+fig_036 <- ggplot(df_036, aes(Year)) +
+  geom_col(aes(y = Per_pupil, fill = "Per-pupil expenditure"),
+         width = 0.7, alpha = ALPHA_COL) +
+  geom_line(aes(y = GDP_share * scale_factor + shift,
+              color = "Education expenditure (% of GDP)"),
+          linewidth = LINE_WIDTH, na.rm = TRUE) +
+  geom_point(aes(y = GDP_share * scale_factor + shift,
+                 color = "Education expenditure (% of GDP)"),
+             size = 2, na.rm = TRUE) +
+  scale_x_years(df_036$Year, by = 1) +
+  scale_y_continuous(
+    name = "Per-pupil expenditure",
+    labels = label_dollar(),
+    limits = primary_range,
+    breaks = seq(12500, 16500, 500),
+    expand = expansion(mult = c(0, 0)),
+    oob = scales::oob_keep,
+    sec.axis = sec_axis(
+      transform = ~ (. - shift) / scale_factor,
+      name = "Education expenditure (% of GDP)",
+      labels = label_number(suffix = "%", accuracy = 0.1),
+      breaks = seq(4.5, 5.5, 0.1)
+    )
+  ) +
+  scale_fill_manual(name = NULL,
+                    values = c("Per-pupil expenditure" = tpa_colors[4])) +
+  scale_color_manual(name = NULL,
+                     values = c("Education expenditure (% of GDP)" = tpa_colors[1])) +
+  labs_meta(meta) +
+  theme_dual_axis()
+
+save_chart(fig_036, "fig_036")
+```
+
+# Figure 37 - US-trained Students – Undergraduate – STEM Major Persistence Rate – Three and Five-Year
+```{r figure 037}
+meta <- get_meta("fig_037")
+
+category_order <- c("Never",
+                    "Once by Year 3", "Once by Year 6",
+                    "More than Once By Year 3", "More than Once By Year 6")
+
+df_037 <- read_fig("fig_037") %>%
+  rename(Survey = 1) %>%
+  pivot_longer(-Survey, names_to = "Category", values_to = "Share") %>%
+  mutate(
+    Share = as.numeric(Share) * 100,
+    Category = factor(Category, levels = category_order),
+    Survey = factor(Survey, levels = c("2004/2009 Survey", "2012/2017 Survey"))
+  )
+
+palette_037 <- c(
+  "2004/2009 Survey" = tpa_colors[2],   # navy
+  "2012/2017 Survey" = tpa_colors[1]    # red
+)
+
+fig_037 <- ggplot(df_037, aes(Category, Share, fill = Survey)) +
+  geom_col_grouped() +
+  geom_text(aes(label = fmt_pct_1(Share)),
+            position = pos_dodge_grouped(),
+            vjust = -0.6,
+            size = DATA_LABEL_SIZE / .pt,
+            fontface = "bold",
+            family = FONT_FAMILY,
+            color = "grey25") +
+  scale_x_discrete(labels = function(x) str_wrap(x, 12)) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(0, 70),
+                     breaks = seq(0, 70, 10),
+                     expand = EXPAND_TIGHT_TOP) +
+  scale_fill_manual(values = palette_037) +
+  labs_meta(meta, y = "Share of students") +
+  theme_tpa() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+save_chart(fig_037, "fig_037")
+```
+
+# Figure 38 - STEM Graduation Outcomes by Initially Declared Major, All Cohorts
+```{r figure 038}
+meta <- get_meta("fig_038")
+
+df_038 <- read_fig("fig_038") %>%
+  rename(Cohort = 1) %>%
+  mutate(Cohort = str_trim(Cohort)) %>%
+  pivot_longer(-Cohort, names_to = "Outcome", values_to = "Share") %>%
+  mutate(
+    Share = as.numeric(Share) * 100,
+    Cohort = factor(Cohort, levels = c("1990/1994", "1996/2001", "2004/2009", "2012/2017"))
+  )
+
+outcome_palette <- c(
+  "Entered STEM, Graduated STEM"         = tpa_colors[2],   # navy
+  "Entered STEM, Graduated non-STEM"     = tpa_colors[1],   # red
+  "Entered non-STEM, Graduated STEM"     = tpa_colors[4],   # green
+  "Entered non-STEM, Graduated non-STEM" = tpa_colors[5]    # purple
+)
+
+make_fig_038 <- function(outcome, y_limits, y_by) {
+  df <- df_038 %>% filter(Outcome == outcome)
+  series_color <- outcome_palette[[outcome]]
+  
+  ggplot(df, aes(Cohort, Share, group = 1)) +
+    geom_trend(color = series_color) +
+    geom_line(linewidth = LINE_WIDTH, color = series_color) +
+    geom_point(size = 2, color = series_color) +
+    geom_text(aes(label = fmt_pct_1(Share)),
+              vjust = -1.1,
+              size = DATA_LABEL_SIZE / .pt,
+              fontface = "bold",
+              family = FONT_FAMILY,
+              color = series_color) +
+    scale_y_continuous(labels = label_number(suffix = "%"),
+                       limits = y_limits,
+                       breaks = seq(y_limits[1], y_limits[2], y_by),
+                       expand = expansion(mult = c(0.05, 0.10))) +
+    labs(title = outcome,
+         subtitle = NULL,
+         caption = NULL,
+         x = NULL, y = "Share of students") +
+    theme_tpa() +
+    theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+}
+
+fig_038a <- make_fig_038("Entered STEM, Graduated STEM",
+                         y_limits = c(50, 70), y_by = 2) +
+  labs(title = "Entered STEM, Graduated STEM",
+       subtitle = meta$subtitle,
+       caption = meta$caption)
+save_chart(fig_038a, "fig_038a")
+
+fig_038b <- make_fig_038("Entered STEM, Graduated non-STEM",
+                         y_limits = c(30, 50), y_by = 2) +
+  labs(title = "Entered STEM, Graduated non-STEM",
+       subtitle = meta$subtitle,
+       caption = meta$caption)
+save_chart(fig_038b, "fig_038b")
+
+fig_038c <- make_fig_038("Entered non-STEM, Graduated STEM",
+                         y_limits = c(0, 20), y_by = 2) +
+  labs(title = "Entered non-STEM, Graduated STEM",
+       subtitle = meta$subtitle,
+       caption = meta$caption)
+save_chart(fig_038c, "fig_038c")
+
+fig_038d <- make_fig_038("Entered non-STEM, Graduated non-STEM",
+                         y_limits = c(80, 100), y_by = 2) +
+  labs(title = "Entered non-STEM, Graduated non-STEM",
+       subtitle = meta$subtitle,
+       caption = meta$caption)
+save_chart(fig_038d, "fig_038d")
+```
+
+# Figure 39 - Trends in U.S. Students Studying Abroad (For Academic Credit), by Year (1989/90-2022/2023)
+```{r figure 039}
+meta <- get_meta("fig_039")
+df   <- read_discrete_bar("fig_039")
+fig  <- plot_discrete_bar(df, meta, "U.S. students studying abroad",
+                          label_fn = label_comma())
+save_chart(fig, "fig_039")
+```
+
+# Figure 40 - Distribution of Field of Study in U.S. Study Abroad Students (2000/01-2023/24)
+```{r figure 040}
+meta <- get_meta("fig_040")
+df   <- read_country_lines("fig_040", group_col = "Field", value_col = "Share")
+fig  <- plot_country_lines(df, meta, "Share of U.S. students abroad",
+                           group_col = "Field",
+                           value_col = "Share",
+                           label_fmt = fmt_pct_1,
+                           x_by      = 2,
+                           pad_right = PAD_RIGHT_STANDARD,
+                           y_args    = list(
+                             labels = label_number(suffix = "%"),
+                             limits = c(0, 35),
+                             breaks = seq(0, 35, 5),
+                             expand = EXPAND_BAR_TIGHT
+                           ))
+save_chart(fig, "fig_040")
+```
+
+# Figure 41 - Distribution of Host Regions of U.S. Students Studying Abroad (For Academic Credit), by Year and By World Region (2004/05-2022/23)
+```{r figure 041}
+meta <- get_meta("fig_041")
+
+df_041 <- read_fig("fig_041") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Region", values_to = "Share") %>%
+  filter(!is.na(Share), Region != "Antarctica") %>%
+  order_by_total(Region, Share)
+
+fig_041 <- ggplot(df_041, aes(Year, Share, fill = Region)) +
+  geom_area(alpha = ALPHA_AREA) +
+  scale_x_years(df_041$Year, by = 2) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(0, 100),
+                     breaks = seq(0, 100, 10),
+                     expand = expansion(mult = c(0, 0))) +
+  scale_fill_stacked(n = 8) +
+  labs_meta(meta, y = "Share of U.S. students abroad") +
+  theme_tpa()
+
+save_chart(fig_041, "fig_041")
+```
+
+# Figure 42 - Net flow of internationally mobile students (inbound - outbound) (UIS estimate)
+```{r figure 042}
+meta <- get_meta("fig_042")
+
+df_042 <- read_fig("fig_042") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Country", values_to = "Flow") %>%
+  filter(!is.na(Flow)) %>%
+  mutate(Flow = Flow / 1e6) %>%
+  order_by_latest(Country, Flow)
+
+highlight_042 <- highlight_colors(
+  df_042$Country,
+  highlighted = c("United States of America", "China"),
+  palette     = c(tpa_colors[2], tpa_colors[1])
+)
+
+labels_042 <- df_042 %>%
+  filter(Country %in% c("United States of America", "China")) %>%
+  group_by(Country) %>%
+  slice_max(Year, n = 1) %>%
+  ungroup() %>%
+  mutate(label = paste0(
+    if_else(Country == "United States of America", "United States", Country),
+    ": ", sprintf("%.2fM", Flow)
+  ))
+
+fig_042 <- ggplot(df_042, aes(Year, Flow, color = Country, group = Country)) +
+  geom_hline(yintercept = 0, color = "grey50", linewidth = LINE_WIDTH_REF) +
+  geom_line(linewidth = LINE_WIDTH_DENSE) +
+  geom_label_repel_tpa(
+    data         = labels_042,
+    mapping      = aes(label = label),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_042$Year, by = 2, pad_right = PAD_RIGHT_NARROW) +
+  scale_y_continuous(labels = function(x) paste0(sprintf("%.1f", x), "M"),
+                     expand = expansion(mult = c(0.05, 0.05))) +
+  scale_color_manual(values = highlight_042) +
+  guides(color = "none") +
+  labs_meta(meta, y = "Net flow (millions of students)") +
+  theme_tpa()
+
+save_chart(fig_042, "fig_042")
+```
+
+# Figure 43 - US Universities in the Top 100 in Each STEM Field, Averaged (2014-2025)
+```{r figure 043}
+meta <- get_meta("fig_043")
+
+df_043 <- read_fig("fig_043") %>%
+  filter(!is.na(Year)) %>%
+  mutate(across(everything(), as.numeric))
+
+primary_range   <- c(30, 45)
+secondary_range <- c(30, 45)
+scale_factor <- diff(primary_range) / diff(secondary_range)
+shift        <- primary_range[1] - secondary_range[1] * scale_factor
+
+fig_043 <- ggplot(df_043, aes(Year)) +
+  geom_col(aes(y = `Avg Count`, fill = "Avg count of US universities in top 100"),
+           width = BAR_WIDTH, alpha = ALPHA_COL) +
+  geom_trend(mapping = aes(y = `Avg Count`), color = tpa_colors[1]) +
+  geom_line(aes(y = `Avg Rank` * scale_factor + shift,
+                color = "Avg rank of US universities in top 100"),
+            linewidth = LINE_WIDTH) +
+  geom_point(aes(y = `Avg Rank` * scale_factor + shift,
+                 color = "Avg rank of US universities in top 100"),
+             size = POINT_SIZE) +
+  geom_trend(mapping = aes(y = `Avg Rank` * scale_factor + shift), color = tpa_colors[4]) +
+  geom_text(aes(y = `Avg Count`, label = round(`Avg Count`)),
+            vjust    = -0.6,
+            color    = tpa_colors[1],
+            size     = DATA_LABEL_SIZE / .pt,
+            fontface = "bold",
+            family   = FONT_FAMILY) +
+  geom_text(aes(y = `Avg Rank` * scale_factor + shift,
+                label = sprintf("%.1f", `Avg Rank`)),
+            vjust    = -1.1,
+            color    = tpa_colors[4],
+            size     = DATA_LABEL_SIZE / .pt,
+            fontface = "bold",
+            family   = FONT_FAMILY) +
+  scale_x_years(df_043$Year, by = 1) +
+  scale_y_continuous(
+    name   = "Average count in top 100",
+    limits = primary_range,
+    breaks = seq(30, 45, 2),
+    expand = EXPAND_NONE,
+    oob    = scales::oob_keep,
+    sec.axis = sec_axis(
+      transform = ~ (. - shift) / scale_factor,
+      name      = "Average rank",
+      breaks    = seq(30, 45, 2)
+    )
+  ) +
+  scale_fill_manual(name = NULL,
+                    values = c("Avg count of US universities in top 100" = tpa_colors[1])) +
+  scale_color_manual(name = NULL,
+                     values = c("Avg count of US universities in top 100" = tpa_colors[1],
+                                "Avg rank of US universities in top 100"  = tpa_colors[4])) +
+  guides(fill  = guide_legend(order = 1),
+         color = guide_legend(order = 2)) +
+  labs_meta(meta) +
+  theme_dual_axis() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+save_chart(fig_043, "fig_043")
+```
+
+# Figure 44 - Fractional Shares of Top-Cited Emerging-Technology Publications: China–US Trajectories, 2015–2024
+```{r figure 044}
+meta <- get_meta("fig_044")
+
+df_044 <- read_fig("fig_044") %>%
+  filter(!is.na(Year)) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Country", values_to = "Share") %>%
+  mutate(
+    Share   = Share * 100,
+    Country = case_when(
+      Country == "china" ~ "China",
+      Country == "us"    ~ "United States"
+    )
+  )
+
+fig_044 <- ggplot(df_044, aes(Year, Share, color = Country, group = Country)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_point(size = 2) +
+  geom_text(aes(label = fmt_pct_0(Share)),
+            vjust       = -1.1,
+            size        = DATA_LABEL_SIZE / .pt,
+            fontface    = "bold",
+            family      = FONT_FAMILY,
+            show.legend = FALSE) +
+  scale_x_years(df_044$Year, by = 1) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(0, 25),
+                     breaks = seq(0, 25, 5),
+                     expand = EXPAND_LINE) +
+  scale_color_china_us() +
+  labs_meta(meta, y = "Fractional share of top-cited publications") +
+  theme_tpa() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+save_chart(fig_044, "fig_044")
+```
+
+# Figure 45 - U.S. and Chinese authorship shares in top emerging technology publications, 2015–2025
+```{r figure 045}
+meta <- get_meta("fig_045")
+
+df_045 <- read_fig("fig_045") %>%
+  filter(!is.na(Year)) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Country", values_to = "Share") %>%
+  mutate(
+    Share   = Share * 100,
+    Country = case_when(
+      Country == "pct_papers_with_us" ~ "United States",
+      Country == "pct_papers_with_cn" ~ "China"
+    )
+  )
+
+fig_045 <- ggplot(df_045, aes(Year, Share, color = Country, group = Country)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_point(size = 2) +
+  geom_text(aes(label = fmt_pct_1(Share)),
+            vjust       = -1.1,
+            size        = DATA_LABEL_SIZE / .pt,
+            fontface    = "bold",
+            family      = FONT_FAMILY,
+            show.legend = FALSE) +
+  scale_x_years(df_045$Year, by = 1) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(15, 35),
+                     breaks = seq(15, 35, 2),
+                     expand = EXPAND_LINE) +
+  scale_color_china_us() +
+  labs_meta(meta, y = "Share of top emerging-tech publications") +
+  theme_tpa() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+save_chart(fig_045, "fig_045")
+```
+
+# Figure 46 - Top 1% Most-Cited Researchers – US-Affiliated trends
+```{r figure 046}
+meta <- get_meta("fig_046")
+
+df_046 <- read_fig("fig_046") %>%
+  filter(!is.na(Year)) %>%
+  mutate(across(everything(), as.numeric),
+         Share = Share * 100)
+
+primary_range   <- c(0, 3000)
+secondary_range <- c(0, 60)
+scale_factor <- diff(primary_range) / diff(secondary_range)
+shift        <- primary_range[1] - secondary_range[1] * scale_factor
+
+fig_046 <- ggplot(df_046, aes(Year)) +
+  geom_col(aes(y = Count, fill = "Top 1% most-cited US-affiliated researchers"),
+         width = 0.7, alpha = ALPHA_COL) +
+  geom_line(aes(y = Share * scale_factor + shift, color = "Share of global top 1%"),
+          linewidth = LINE_WIDTH) +
+  geom_point(aes(y = Share * scale_factor + shift,
+                 color = "Share of global top 1%"),
+             size = 2) +
+  scale_x_years(df_046$Year, by = 1) +
+  scale_y_continuous(
+    name = "US-affiliated researchers",
+    labels = label_comma(),
+    limits = primary_range,
+    breaks = seq(0, 3000, 500),
+    expand = EXPAND_TIGHT_TOP,
+    sec.axis = sec_axis(
+      transform = ~ (. - shift) / scale_factor,
+      name = "Share of global top 1%",
+      labels = label_number(suffix = "%"),
+      breaks = seq(0, 60, 10)
+    )
+  ) +
+  scale_fill_manual(name = NULL,
+                    values = c("Top 1% most-cited US-affiliated researchers" = tpa_colors[2])) +
+  scale_color_manual(name = NULL,
+                     values = c("Share of global top 1%" = tpa_colors[1])) +
+  labs_meta(meta) +
+  theme_dual_axis() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+save_chart(fig_046, "fig_046")
+```
+
+# Figure 47 - Share of Authors of NeurIPS Oral Presentations by Primary Country of Affiliation (2013-2025)
+```{r figure 047}
+meta <- get_meta("fig_047")
+
+df_047 <- read_fig("fig_047") %>%
+  filter(!is.na(Year)) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Region", values_to = "Share") %>%
+  filter(!is.na(Share)) %>%
+  mutate(
+    Share  = Share * 100,
+    Region = factor(Region, levels = c("United States", "Rest of the World", "China"))
+  )
+
+palette_047 <- c(
+  china_us_colors,
+  "Rest of the World" = "grey55"
+)
+
+fig_047 <- ggplot(df_047, aes(Year, Share, color = Region, group = Region)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_point(size = 2) +
+  geom_text(aes(label = fmt_pct_1(Share)),
+            vjust       = -1.1,
+            size        = DATA_LABEL_SIZE / .pt,
+            fontface    = "bold",
+            family      = FONT_FAMILY,
+            show.legend = FALSE) +
+  scale_x_years(df_047$Year, by = 1) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(0, 90),
+                     breaks = seq(0, 90, 10),
+                     expand = EXPAND_BAR_TIGHT) +
+  scale_color_manual(values = palette_047) +
+  labs_meta(meta, y = "Share of NeurIPS oral presentations") +
+  theme_tpa() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+save_chart(fig_047, "fig_047")
+```
+
+# Figure 48 - Distribution of Author Affiliations, by Year and by Country (By Conference)
+```{r figure 048}
+meta <- get_meta("fig_048")
+
+conf_names <- c(
+  acl          = "Association for Computational Linguistics (NLP) [ACL]",
+  acml         = "Asian Conference on Machine Learning (ML) [ACML]",
+  aistats      = "AI and Statistics (Stats / ML) [AISTATS]",
+  coling       = "Computational Linguistics (NLP) [COLING]",
+  colt         = "Learning Theory (Theoretical ML) [COLT]",
+  corl         = "Robot Learning (Robotics / ML) [CORL]",
+  cvpr         = "Computer Vision and Pattern Recognition (CV) [CVPR]",
+  emnlp        = "Empirical Methods in NLP (NLP) [EMNLP]",
+  iccv         = "Computer Vision (CV) [ICCV]",
+  iclr         = "Learning Representations (ML) [ICLR]",
+  icml         = "Machine Learning (ML) [ICML]",
+  icra         = "Robotics and Automation (Robotics) [ICRA]",
+  ijcai        = "Artificial Intelligence (AI) [IJCAI]",
+  iros         = "Intelligent Robots and Systems (Robotics) [IROS]",
+  naacl        = "North American ACL (NLP) [NAACL]",
+  nips         = "Neural Information Processing Systems (ML / AI) [NIPS]",
+  rss          = "Robotics: Science and Systems (Robotics) [RSS]",
+  siggraphasia = "SIGGRAPH Asia (Graphics) [SIGGRAPHASIA]",
+  uai          = "Uncertainty in AI (AI / Probabilistic ML) [UAI]",
+  wacv         = "Applications of Computer Vision (CV) [WACV]"
+)
+
+df_048 <- read_fig("fig_048") %>%
+  mutate(across(c(year, count, share), as.numeric)) %>%
+  filter(!is.na(share), country %in% c("United States", "China")) %>%
+  mutate(
+    share        = share * 100,
+    conf_full    = conf_names[conf_norm],
+    conf_wrapped = str_wrap(conf_full, 38),
+    country      = factor(country, levels = c("United States", "China"))
+  ) %>%
+  filter(!is.na(conf_full))
+
+# --- Facet (all conferences in one grid) ---
+fig_048 <- ggplot(df_048, aes(year, share, color = country, group = country)) +
+  geom_line(linewidth = LINE_WIDTH_FACET) +
+  facet_wrap(~ conf_wrapped, ncol = 3, scales = "free_x") +
+  scale_x_continuous(breaks = function(lims) {
+    seq(ceiling(lims[1]), floor(lims[2]),
+        by = max(1, round((lims[2] - lims[1]) / 4)))
+  }) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(0, 100),
+                     breaks = seq(0, 100, 20),
+                     expand = EXPAND_BAR_TIGHT) +
+  scale_color_china_us() +
+  labs_meta(meta, y = "Share of author affiliations") +
+  theme_facet()
+
+save_chart(fig_048, "fig_048", size = "xlong")
+
+# --- Individual chart per conference ---
+make_fig_048 <- function(code) {
+  df <- df_048 %>% filter(conf_norm == code)
+
+  ggplot(df, aes(year, share, color = country, group = country)) +
+    geom_line(linewidth = LINE_WIDTH) +
+    geom_point(size = POINT_SIZE) +
+    scale_x_continuous(breaks = unique(df$year)) +
+    scale_y_continuous(labels = label_number(suffix = "%"),
+                       limits = c(0, 100),
+                       breaks = seq(0, 100, 20),
+                       expand = EXPAND_BAR_TIGHT) +
+    scale_color_china_us() +
+    labs(title    = conf_names[[code]],
+         subtitle = meta$subtitle,
+         caption  = meta$caption,
+         x = NULL, y = "Share of author affiliations") +
+    theme_tpa()
+}
+
+for (code in names(conf_names)) {
+  if (!code %in% df_048$conf_norm) next
+  fig <- make_fig_048(code)
+  save_chart(fig, paste0("fig_048_", code))
+  assign(paste0("fig_048_", code), fig, envir = .GlobalEnv)
+}
+```
+
+# Figure 49 - Rolling Average of US Recipients of Top Awards in STEM Fields (2000-2024)
+```{r figure 049}
+meta <- get_meta("fig_049")
+
+short_names <- c(
+  "10-Year Rolling Average of US Affiliated Scientists Who Won A Nobel Prize in STEM" = "Nobel Prize - US Affiliated (10yr)",
+  "10-Year Rolling Average of US Born Scientists Who Won A Nobel Prize in STEM"       = "Nobel Prize - US Born (10yr)",
+  "10-Year Rolling Average of US Born Scientists Who Won A Turing Award"              = "Turing Award - US Born (10yr)",
+  "10-Year Rolling Average of US Affiliated Scientists Who Won A Turing Award"        = "Turing Award - US Affiliated (10yr)",
+  "20-Year Rolling Average of US Affiliated Scientists Who Won A Fields Medal"        = "Fields Medal - US Affiliated (20yr)"
+)
+
+df_049 <- read_fig("fig_049") %>%
+  filter(!is.na(Year)) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Award", values_to = "Count") %>%
+  filter(!is.na(Count)) %>%
+  mutate(Award = recode(Award, !!!short_names)) %>%
+  order_by_latest(Award, Count)
+
+labels_049 <- last_by_group(df_049, Year, Award)
+
+fig_049 <- ggplot(df_049, aes(Year, Count, color = Award, group = Award)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_049,
+    mapping      = aes(label = paste0(Award, ": ", Count)),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_049$Year, by = 2, pad_right = PAD_RIGHT_XWIDE) +
+  scale_y_continuous(limits = c(0, 60),
+                     breaks = seq(0, 60, 10),
+                     expand = EXPAND_LINE) +
+  scale_color_tpa() +
+  guides(color = "none") +
+  labs_meta(meta, y = "Rolling average of recipients") +
+  theme_tpa()
+
+save_chart(fig_049, "fig_049")
+```
+
+# Figure 50 - Distribution of Citizenship Status of U.S. Affiliated Nobel Laureates (1900-2025)
+```{r figure 050}
+meta <- get_meta("fig_050")
+
+df_050 <- read_fig("fig_050") %>%
+  rename(Status = 1) %>%
+  pivot_longer(c(chemistry, medicine, physics),
+               names_to = "Prize", values_to = "Count") %>%
+  group_by(Status) %>%
+  summarise(Count = sum(Count, na.rm = TRUE), .groups = "drop") %>%
+  mutate(
+    Status = factor(Status, levels = c("Born Citizen", "Immigrant")),
+    Share  = Count / sum(Count) * 100
+  ) %>%
+  arrange(Status)
+
+palette_050 <- c(
+  "Born Citizen" = tpa_colors[2],
+  "Immigrant"    = tpa_colors[1]
+)
+
+fig_050 <- ggplot(df_050, aes(x = Share, y = "Nobel laureates", fill = Status)) +
+  geom_col(width = BAR_WIDTH_SINGLE, color = "white", linewidth = 0.5) +
+  geom_text(
+    data = df_050 %>% filter(Share >= 5),
+    aes(label = paste0(Status, ": ", fmt_pct_1(Share))),
+    position = position_stack(vjust = 0.5),
+    color = "white", fontface = "bold",
+    family = FONT_FAMILY, size = DATA_LABEL_SIZE / .pt
+  ) +
+  scale_x_continuous(labels = label_number(suffix = "%"),
+                     breaks = seq(0, 100, 10),
+                     limits = c(0, 100),
+                     expand = expansion(mult = c(0, 0))) +
+  scale_fill_manual(values = palette_050,
+                    breaks = c("Born Citizen", "Immigrant")) +
+  guides(fill = "none") +
+  labs_meta(meta, x = "Share of U.S.-affiliated Nobel laureates") +
+  theme_horizontal_bar() +
+  theme(axis.text.y = element_blank())
+
+save_chart(fig_050, "fig_050")
+```
+
+# Figure 51 - Distribution of Country of Origin of U.S. Affiliated Immigrant Nobel Laureates (1900-2025)
+```{r figure 051}
+meta <- get_meta("fig_051")
+
+df_051 <- read_fig("fig_051") %>%
+  rename(Country = 1, Count = 2) %>%
+  mutate(
+    Count   = as.numeric(Count),
+    Country = case_when(
+      Country == "the Netherlands" ~ "Netherlands",
+      Country == "Czech Republic"  ~ "Czech Republic",
+      Country == "South Korea"     ~ "Republic of Korea",
+      TRUE                         ~ Country
+    )
+  ) %>%
+  group_by(Country) %>%
+  summarise(Count = sum(Count, na.rm = TRUE), .groups = "drop")
+
+world_051 <- join_country_data(df_051)
+
+fig_051 <- ggplot(world_051) +
+  geom_sf(aes(fill = Count), color = "white", linewidth = 0.2) +
+  geom_country_labels(world_051, value_col = "Count", min_value = 3) +
+  scale_fill_gradient(
+    low      = TPA_RED_LIGHT,
+    high     = tpa_colors[1],
+    na.value = "grey92",
+    trans    = "sqrt",
+    breaks   = c(1, 3, 6, 10, 15),
+    labels   = label_comma(),
+    name     = "Immigrant laureates"
+  ) +
+  coord_sf(crs = "+proj=robin", expand = FALSE) +
+  labs_meta(meta) +
+  theme_map()
+
+save_chart(fig_051, "fig_051")
+```
+
+# Figure 52 - United States - Composition and Mobility of Researchers Contributing to Company-Affiliated AI Papers (2025)
+```{r figure 052}
+meta <- get_meta("fig_052")
+
+category_order <- c(
+  "Purely Domestic",
+  "Started Domestic, Trained Abroad, Returned",
+  "Started Abroad, Came to the US, Stayed",
+  "Started Domestic, Trained Abroad, Stayed Abroad",
+  "Started Abroad, Came to the US, Left",
+  "Purely Abroad"
+)
+
+palette_052 <- mobility_colors_base
+names(palette_052)[names(palette_052) == "Inbound, Stayed"] <- "Started Abroad, Came to the US, Stayed"
+names(palette_052)[names(palette_052) == "Inbound, Left"]   <- "Started Abroad, Came to the US, Left"
+
+df_052 <- read_fig("fig_052") %>%
+  rename(Category = 1, Count = 2) %>%
+  mutate(
+    Count    = as.numeric(Count),
+    Category = factor(Category, levels = rev(category_order)),
+    Share    = Count / sum(Count) * 100
+  ) %>%
+  arrange(Category)
+
+fig_052 <- ggplot(df_052, aes(x = Share, y = "Researchers", fill = Category)) +
+  geom_col(width = BAR_WIDTH_SINGLE, color = "white", linewidth = 0.5) +
+  geom_text(
+    data     = df_052 %>% filter(Share >= 5),
+    aes(label = fmt_pct_0(Share)),
+    position = position_stack(vjust = 0.5),
+    color    = "white",
+    fontface = "bold",
+    family   = FONT_FAMILY,
+    size     = DATA_LABEL_SIZE / .pt
+  ) +
+  scale_x_continuous(labels = label_number(suffix = "%"),
+                     breaks = seq(0, 100, 10),
+                     limits = c(0, 100),
+                     expand = expansion(mult = c(0, 0))) +
+  scale_fill_manual(values = palette_052, breaks = category_order) +
+  guides(fill = guide_legend(ncol = 2, byrow = TRUE)) +
+  labs_meta(meta, x = "Share of U.S.-affiliated AI researchers") +
+  theme_horizontal_bar() +
+  theme(axis.text.y = element_blank())
+
+save_chart(fig_052, "fig_052")
+```
+
+# Figure 53 - China - Composition and Mobility of Researchers Contributing to Company-Affiliated AI Papers (2025)
+```{r figure 053}
+meta <- get_meta("fig_053")
+
+category_order <- c(
+  "Purely Domestic",
+  "Started Domestic, Trained Abroad, Returned",
+  "Started Abroad, Came to China, Stayed",
+  "Started Domestic, Trained Abroad, Stayed Abroad",
+  "Started Abroad, Came to China, Left",
+  "Purely Abroad"
+)
+
+palette_053 <- mobility_colors_base
+names(palette_053)[names(palette_053) == "Inbound, Stayed"] <- "Started Abroad, Came to China, Stayed"
+names(palette_053)[names(palette_053) == "Inbound, Left"]   <- "Started Abroad, Came to China, Left"
+
+df_053 <- read_fig("fig_053") %>%
+  rename(Category = 1, Count = 2) %>%
+  mutate(
+    Count    = as.numeric(Count),
+    Category = factor(Category, levels = rev(category_order)),
+    Share    = Count / sum(Count) * 100
+  ) %>%
+  arrange(Category)
+
+fig_053 <- ggplot(df_053, aes(x = Share, y = "Researchers", fill = Category)) +
+  geom_col(width = BAR_WIDTH_SINGLE, color = "white", linewidth = 0.5) +
+  geom_text(
+    data     = df_053 %>% filter(Share >= 5),
+    aes(label = fmt_pct_0(Share)),
+    position = position_stack(vjust = 0.5),
+    color    = "white",
+    fontface = "bold",
+    family   = FONT_FAMILY,
+    size     = DATA_LABEL_SIZE / .pt
+  ) +
+  scale_x_continuous(labels = label_number(suffix = "%"),
+                     breaks = seq(0, 100, 10),
+                     limits = c(0, 100),
+                     expand = expansion(mult = c(0, 0))) +
+  scale_fill_manual(values = palette_053, breaks = category_order) +
+  guides(fill = guide_legend(ncol = 2, byrow = TRUE)) +
+  labs_meta(meta, x = "Share of China-affiliated AI researchers") +
+  theme_horizontal_bar() +
+  theme(axis.text.y = element_blank())
+
+save_chart(fig_053, "fig_053")
+```
+
+# Figure 54 - Short-term Impact Indicator - Distribution of 2-Year Mean Citedness by Company
+```{r figure 054}
+df_authors <- read_boxlike_authors()
+
+meta    <- get_meta("fig_054")
+fig_054 <- plot_boxlike_fig(df_authors, "2yr_mean_citedness",
+                             x_label = "2-year mean citedness") +
+  labs(title = meta$title, subtitle = meta$subtitle, caption = meta$caption)
+save_chart(fig_054, "fig_054")
+```
+
+# Figure 55 - Lifetime Reach Indicator - Distribution of Cited by Count by Company
+```{r figure 055}
+meta    <- get_meta("fig_055")
+fig_055 <- plot_boxlike_fig(df_authors, "cited_by_count",
+                             x_label = "Cited by count") +
+  labs(title = meta$title, subtitle = meta$subtitle, caption = meta$caption)
+save_chart(fig_055, "fig_055")
+```
+
+# Figure 56 - Balanced Productivity & Impact Indicator - Distribution of h-index by Company
+```{r figure 056}
+meta    <- get_meta("fig_056")
+fig_056 <- plot_boxlike_fig(df_authors, "h_index",
+                             x_label = "h-index") +
+  labs(title = meta$title, subtitle = meta$subtitle, caption = meta$caption)
+save_chart(fig_056, "fig_056")
+```
+
+# Figure 57 - Reasonably Cited Works Indicator - Distribution of i10-index by Company
+```{r figure 057}
+meta    <- get_meta("fig_057")
+fig_057 <- plot_boxlike_fig(df_authors, "i10_index",
+                             x_label = "i10-index") +
+  labs(title = meta$title, subtitle = meta$subtitle, caption = meta$caption)
+save_chart(fig_057, "fig_057")
+```
+
+# Figure 58 - Output Volume Indicator - Distribution of Works Count by Company
+```{r figure 058}
+meta    <- get_meta("fig_058")
+fig_058 <- plot_boxlike_fig(df_authors, "works_count",
+                             x_label = "Works count") +
+  labs(title = meta$title, subtitle = meta$subtitle, caption = meta$caption)
+save_chart(fig_058, "fig_058")
+```
+
+# Figure 59 - Patents Granted in Biotechnologies by Country Office (Top 10)
+```{r figure 059}
+meta <- get_meta("fig_059")
+df   <- read_patents("fig_059")
+fig  <- plot_patents(df, meta, "Patents granted (log scale)")
+save_chart(fig, "fig_059")
+```
+
+# Figure 60 - Patents Granted in Semiconductor Technologies by Country Office (Top 10)
+```{r figure 060}
+meta <- get_meta("fig_060")
+df   <- read_patents("fig_060")
+fig  <- plot_patents(df, meta, "Patents granted (log scale)")
+save_chart(fig, "fig_060")
+```
+
+# Figure 61 - Patents Granted in Computer Technologies by Country Office (Top 10)
+```{r figure 061}
+meta <- get_meta("fig_061")
+df   <- read_patents("fig_061")
+fig  <- plot_patents(df, meta, "Patents granted (log scale)")
+save_chart(fig, "fig_061")
+```
+
+# Figure 62 - Manufacturing Value Added in USD Trillion Dollars, 2010 - 2024
+```{r figure 062}
+meta <- get_meta("fig_062")
+df   <- read_country_lines("fig_062", group_col = "Region", value_col = "Value") %>%
+  mutate(Value = Value / 1e12)
+fig  <- plot_country_lines(df, meta, "Manufacturing value added",
+                           group_col = "Region",
+                           value_col = "Value",
+                           label_fmt = function(x) paste0("$", sprintf("%.1f", x), "T"),
+                           x_by      = 1,
+                           pad_right = PAD_RIGHT_STANDARD,
+                           y_args    = list(
+                             labels = function(x) paste0("$", x, "T"),
+                             limits = c(0, 6),
+                             breaks = seq(0, 6, 1),
+                             expand = EXPAND_BAR_TIGHT
+                           ))
+save_chart(fig, "fig_062")
+```
+
+# Figure 63 - Gross domestic expenditures on R&D, by selected region, country, or economy:
+```{r figure 063}
+meta <- get_meta("fig_063")
+df   <- read_country_lines("fig_063", group_col = "Region", value_col = "Value") %>%
+  mutate(Value = Value / 1000)
+fig  <- plot_country_lines(df, meta, "R&D expenditure (USD billions, PPP)",
+                           group_col = "Region",
+                           value_col = "Value",
+                           label_fmt = function(x) paste0("$", sprintf("%.0f", x), "B"),
+                           y_args    = list(
+                             labels = function(x) paste0("$", x, "B"),
+                             limits = c(0, 1000),
+                             breaks = seq(0, 1000, 100),
+                             expand = EXPAND_BAR_TIGHT
+                           ))
+save_chart(fig, "fig_063")
+```
+
+# Figure 64 - R&D Intensity in Critical Technology Sectors by Country
+```{r figure 064}
+meta <- get_meta("fig_064")
+df   <- read_country_lines("fig_064", group_col = "Country", value_col = "Share") %>%
+  mutate(Share = Share * 100)
+fig  <- plot_country_lines(df, meta, "R&D intensity (% of GDP)",
+                           value_col = "Share",
+                           label_fmt = fmt_pct_1,
+                           pad_right = PAD_RIGHT_NARROW,
+                           y_args    = list(
+                             labels = label_number(suffix = "%"),
+                             limits = c(0, 16),
+                             breaks = seq(0, 16, 2),
+                             expand = EXPAND_BAR_TIGHT
+                           ))
+save_chart(fig, "fig_064")
+```
+
+# Figure 65 - International PhD Recipients – Intention to Stay
+```{r figure 065}
+meta <- get_meta("fig_065")
+
+df_065 <- read_fig("fig_065") %>%
+  rename(Year = 1, Share = 2) %>%
+  filter(!is.na(Year)) %>%
+  mutate(across(everything(), as.numeric),
+         Share = Share * 100)
+
+fig_065 <- ggplot(df_065, aes(Year, Share)) +
+  geom_col(fill = tpa_colors[2], width = 0.7, alpha = ALPHA_COL) +
+  geom_text(aes(label = fmt_pct_0(Share)),
+            vjust = -0.5,
+            color = tpa_colors[2],
+            size = DATA_LABEL_SIZE / .pt,
+            fontface = "bold",
+            family = FONT_FAMILY) +
+  scale_x_years(df_065$Year, by = 1) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(60, 80),
+                     breaks = seq(60, 80, 2),
+                     expand = EXPAND_TIGHT_TOP,
+                     oob = scales::oob_keep) +
+  coord_cartesian(ylim = c(60, 80)) +
+  labs_meta(meta, y = "Intention to stay in the United States") +
+  theme_tpa()
+
+save_chart(fig_065, "fig_065")
+```
+
+# Figure 66 - Share of ‘Staying’ Responses on Intention to Stay After Receipt of Doctorate Among Temporary Visa Holder Recipients, by World Region
+```{r figure 066}
+meta <- get_meta("fig_066")
+df   <- read_country_lines("fig_066", group_col = "Region", value_col = "Share") %>%
+  filter(Region != "Region and country or economy unknown") %>%
+  mutate(Share = Share * 100)
+fig  <- plot_country_lines(df, meta, "Stay rate after doctorate",
+                           group_col = "Region",
+                           value_col = "Share",
+                           label_fmt = fmt_pct_0,
+                           pad_right = PAD_RIGHT_STANDARD,
+                           y_args    = list(
+                             labels = label_number(suffix = "%"),
+                             limits = c(40, 90),
+                             breaks = seq(40, 90, 10),
+                             expand = EXPAND_BAR_TIGHT
+                           ))
+save_chart(fig, "fig_066")
+```
+
+# Figure 67 - International STEM PhD Recipients – Stay Rates
+```{r figure 067}
+meta <- get_meta("fig_067")
+
+df_067 <- read_fig("fig_067") %>%
+  filter(!is.na(Year)) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Rate", values_to = "Share") %>%
+  filter(!is.na(Share)) %>%
+  mutate(
+    Share = Share * 100,
+    Rate  = factor(Rate, levels = c("5-year stay rate", "10-year stay rate"))
+  )
+
+palette_067 <- c(
+  "5-year stay rate"  = tpa_colors[2],   # navy
+  "10-year stay rate" = tpa_colors[1]    # red
+)
+
+fig_067 <- ggplot(df_067, aes(Year, Share, color = Rate, group = Rate)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_point(size = 2) +
+  geom_text(aes(label = fmt_pct_1(Share)),
+            vjust = -1.1,
+            size = DATA_LABEL_SIZE / .pt,
+            fontface = "bold",
+            family = FONT_FAMILY,
+            show.legend = FALSE) +
+  scale_x_years(df_067$Year, by = 2) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(50, 75),
+                     breaks = seq(50, 75, 5),
+                     expand = expansion(mult = c(0, 0.05))) +
+  scale_color_manual(values = palette_067) +
+  labs_meta(meta, y = "Stay rate") +
+  theme_tpa() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+save_chart(fig_067, "fig_067")
+```
+
+# Figure 68 - Distribution of Postgraduation Plans After Receipt of Doctorate Among Science and Engineering Research Doctorate Recipients, by Broad Major Field (2023)
+```{r figure 068}
+meta <- get_meta("fig_068")
+
+field_order <- c(
+  "Agricultural sciences and natural resources",
+  "Biological and biomedical sciences",
+  "Computer and information sciences",
+  "Engineering",
+  "Geosciences, atmospheric, and ocean sciences",
+  "Health sciences",
+  "Mathematics and statistics",
+  "Multidisciplinary/ interdisciplinary sciences",
+  "Physical sciences",
+  "Psychology",
+  "Social sciences",
+  "Non-science and engineering"
+)
+
+df_068 <- read_fig("fig_068") %>%
+  filter(!is.na(Year)) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Field", values_to = "Share") %>%
+  filter(!is.na(Share)) %>%
+  mutate(
+    Share = Share * 100,
+    Field = factor(Field, levels = field_order),
+    Year  = factor(Year)
+  )
+
+palette_068 <- c(
+  "2021" = tpa_colors[2],   # navy
+  "2022" = tpa_colors[1],   # red
+  "2023" = tpa_colors[4],   # green
+  "2024" = tpa_colors[5]    # purple
+)
+
+fig_068 <- ggplot(df_068, aes(Field, Share, fill = Year)) +
+  geom_col_grouped() +
+  scale_x_discrete(labels = function(x) str_wrap(x, 15)) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(0, 100),
+                     breaks = seq(0, 100, 10),
+                     expand = EXPAND_TIGHT_TOP) +
+  scale_fill_manual(values = palette_068) +
+  labs_meta(meta, y = "Plans for postdoc or employment in the U.S.") +
+  theme_tpa() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = AXIS_SIZE - 2))
+
+save_chart(fig_068, "fig_068", size = "long")
+```
+
+# Figure 69 - Trends in Distribution of Employment Sector of Doctorate Recipients with Definite Postgraduation Commitments for Non-postdoc Employment in the United States (1993-2023) - TVH Recipients
+```{r figure 069}
+meta <- get_meta("fig_069")
+df   <- read_sector_employment("fig_069")
+fig  <- plot_sector_employment(df, meta, "Share of TVH doctorate recipients",
+                               y_limits = c(0, 80),
+                               y_breaks = seq(0, 80, 10))
+save_chart(fig, "fig_069")
+```
+
+# Figure 70 - Trends in Distribution of Employment Sector of Doctorate Recipients with Definite Postgraduation Commitments for Non-postdoc Employment in the United States (1993-2023) - US Recipients
+```{r figure 070}
+meta <- get_meta("fig_070")
+df   <- read_sector_employment("fig_070")
+fig  <- plot_sector_employment(df, meta, "Share of US doctorate recipients",
+                               y_limits = c(0, 60),
+                               y_breaks = seq(0, 60, 10))
+save_chart(fig, "fig_070")
+```
+
+# Figure 71 - STEM OPT Approvals, Applications Received, Approval Rates
+```{r figure 071}
+meta <- get_meta("fig_071")
+
+df_071 <- read_fig("fig_071") %>%
+  filter(!is.na(Year)) %>%
+  mutate(across(everything(), as.numeric),
+         `Approval Rate` = `Approval Rate` * 100)
+
+df_071_bars <- df_071 %>%
+  select(Year, Received, Approved) %>%
+  pivot_longer(-Year, names_to = "Status", values_to = "Count") %>%
+  mutate(Status = factor(Status, levels = c("Received", "Approved")))
+
+primary_max   <- 20000
+secondary_max <- 100
+scale_factor <- primary_max / secondary_max
+
+fig_071 <- ggplot() +
+  geom_col(data = df_071_bars,
+           aes(Year, Count, fill = Status),
+           position = position_dodge(width = 0.8),
+           width = 0.7, alpha = ALPHA_COL) +
+  geom_line(data = df_071,
+          aes(Year, `Approval Rate` * scale_factor, color = "Approval rate"),
+          linewidth = LINE_WIDTH) +
+  geom_point(data = df_071,
+             aes(Year, `Approval Rate` * scale_factor,
+                 color = "Approval rate"),
+             size = 2) +
+  scale_x_years(df_071$Year, by = 1) +
+  scale_y_continuous(
+    name = "Applications",
+    labels = label_comma(),
+    limits = c(0, primary_max),
+    breaks = seq(0, primary_max, 2500),
+    expand = EXPAND_TIGHT_TOP,
+    sec.axis = sec_axis_scaled(scale_factor,
+                               name = "Approval rate",
+                               labels = label_number(suffix = "%"))
+  ) +
+  scale_fill_manual(name = NULL,
+                    values = c("Received" = tpa_colors[2],
+                               "Approved" = tpa_colors[1])) +
+  scale_color_manual(name = NULL,
+                     values = c("Approval rate" = tpa_colors[5])) +
+  labs_meta(meta) +
+  theme_dual_axis()
+
+save_chart(fig_071, "fig_071")
+```
+
+# Figure 72 - Trends in H-1B approvals, by Application Type (2009-2025)
+```{r figure 072}
+meta <- get_meta("fig_072")
+
+df_072 <- read_fig("fig_072") %>%
+  filter(!is.na(Year)) %>%
+  select(Year, `New Approved`, `Renewal Approved`) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Type", values_to = "Count") %>%
+  filter(!is.na(Count)) %>%
+  mutate(Type = factor(Type, levels = c("Renewal Approved", "New Approved")))
+
+palette_072 <- c(
+  "New Approved"     = tpa_colors[1],
+  "Renewal Approved" = tpa_colors[4]
+)
+
+fig_072 <- ggplot(df_072, aes(Year, Count, fill = Type)) +
+  geom_area(alpha = ALPHA_AREA) +
+  scale_x_years(df_072$Year, by = 1) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = EXPAND_BAR) +
+  scale_fill_manual(values = palette_072,
+                    breaks = c("New Approved", "Renewal Approved")) +
+  labs_meta(meta, y = "H-1B approvals") +
+  theme_tpa()
+
+save_chart(fig_072, "fig_072")
+```
+
+# Figure 73 - Share of H-1B Visa Denials Per Fiscal Year
+```{r figure 073}
+meta <- get_meta("fig_073")
+df   <- read_hb_denials("fig_073")
+fig  <- plot_hb_denials(df, meta, "H-1B denials")
+save_chart(fig, "fig_073")
+```
+
+# Figure 74 - Trends in H-1B approvals for NAICS Code 54 - Professional, Scientific, and Technical Services, by Application Type (2009-2025)
+```{r figure 074}
+meta <- get_meta("fig_074")
+
+df_074 <- read_fig("fig_074") %>%
+  filter(!is.na(Year)) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Type", values_to = "Count") %>%
+  filter(!is.na(Count)) %>%
+  mutate(Type = factor(Type, levels = c("Renewal Approved", "New Approved")))
+
+palette_074 <- c(
+  "New Approved"     = tpa_colors[2],
+  "Renewal Approved" = tpa_colors[1]
+)
+
+fig_074 <- ggplot(df_074, aes(Year, Count, fill = Type)) +
+  geom_area(alpha = ALPHA_AREA) +
+  scale_x_years(df_074$Year, by = 1) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = EXPAND_BAR) +
+  scale_fill_manual(values = palette_074,
+                    breaks = c("New Approved", "Renewal Approved")) +
+  labs_meta(meta, y = "H-1B approvals (NAICS 54)") +
+  theme_tpa()
+
+save_chart(fig_074, "fig_074")
+```
+
+# Figure 75 - Share of H-1B Visa Denials Per Fiscal Year for NAICS Code 54 - Professional, Scientific, and Technical Services
+```{r figure 075}
+meta <- get_meta("fig_075")
+df   <- read_hb_denials("fig_075")
+fig  <- plot_hb_denials(df, meta, "H-1B denials (NAICS 54)")
+save_chart(fig, "fig_075")
+```
+
+# Figure 76 - Distribution of PERM Applications by Status (2008-2024)
+```{r figure 076}
+meta <- get_meta("fig_076")
+
+df_076 <- read_fig("fig_076") %>%
+  filter(!is.na(Year)) %>%
+  select(Year, Certified = `Certified (Current + Expired)`, Denied) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Status", values_to = "Count") %>%
+  filter(!is.na(Count)) %>%
+  mutate(Status = factor(Status, levels = c("Denied", "Certified")))
+
+palette_076 <- c(
+  "Certified" = tpa_colors[1],
+  "Denied"    = tpa_colors[6]
+)
+
+fig_076 <- ggplot(df_076, aes(Year, Count, fill = Status)) +
+  geom_area(alpha = ALPHA_AREA) +
+  scale_x_years(df_076$Year, by = 1) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = EXPAND_BAR) +
+  scale_fill_manual(values = palette_076,
+                    breaks = c("Certified", "Denied")) +
+  labs_meta(meta, y = "PERM applications") +
+  theme_tpa()
+
+save_chart(fig_076, "fig_076")
+```
+
+# Figure 77 - Distribution of Country of Origin of Certified PERM Applications (2008-2024)
+```{r figure 077}
+meta <- get_meta("fig_077")
+
+df_077 <- read_fig("fig_077") %>%
+  filter(!is.na(Year)) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Country", values_to = "Count") %>%
+  filter(!is.na(Count)) %>%
+  mutate(Country = case_when(
+    Country == "Republic of Korea" ~ "South Korea",
+    Country == "Phillippines"      ~ "Philippines",
+    TRUE                           ~ Country
+  )) %>%
+  order_by_latest(Country, Count)
+
+labels_077 <- last_by_group(df_077, Year, Country)
+
+palette_077 <- c(tpa_colors, "grey40")
+
+fig_077 <- ggplot(df_077, aes(Year, Count, color = Country, group = Country)) +
+  geom_line(linewidth = LINE_WIDTH_DENSE) +
+  geom_label_repel_tpa(
+    data         = labels_077,
+    mapping      = aes(label = paste0(Country, ": ", label_comma()(Count))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_077$Year, by = 2, pad_right = PAD_RIGHT_STANDARD) +
+  scale_y_log10(labels = label_comma(),
+                breaks  = c(10, 100, 500, 1000, 5000, 10000, 50000),
+                expand  = EXPAND_LINE) +
+  scale_color_manual(values = palette_077) +
+  guides(color = "none") +
+  labs_meta(meta, y = "PERM certifications (log scale)") +
+  theme_tpa()
+
+save_chart(fig_077, "fig_077")
+```
+
+# Figure 78 - Trends in J-1 Visa Participation by Country (Top 10 overall from the last decade)
+```{r figure 078}
+meta <- get_meta("fig_078")
+
+df_078 <- read_fig("fig_078") %>%
+  filter(!is.na(Year)) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Country", values_to = "Share") %>%
+  filter(!is.na(Share)) %>%
+  mutate(Share = Share * 100) %>%
+  order_by_latest(Country, Share)
+
+labels_078 <- last_by_group(df_078, Year, Country)
+
+palette_078 <- c(tpa_colors, "grey40", "grey60")
+
+fig_078 <- ggplot(df_078, aes(Year, Share, color = Country, group = Country)) +
+  geom_line(linewidth = LINE_WIDTH_DENSE) +
+  geom_label_repel_tpa(
+    data         = labels_078,
+    mapping      = aes(label = paste0(Country, ": ", fmt_pct_1(Share))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_078$Year, by = 1, pad_right = PAD_RIGHT_STANDARD) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(0, 12),
+                     breaks = seq(0, 12, 2),
+                     expand = EXPAND_BAR_TIGHT) +
+  scale_color_manual(values = palette_078) +
+  guides(color = "none") +
+  labs_meta(meta, y = "Share of J-1 participants") +
+  theme_tpa()
+
+save_chart(fig_078, "fig_078")
+```
+
+# Figure 79 - Immigrant vs Native-Born Workforce Participation Rate Gap, by Country (2024)
+```{r figure 079}
+meta <- get_meta("fig_079")
+
+df_079 <- read_fig("fig_079") %>%
+  rename(Gap = `Gap with the native-born`) %>%
+  mutate(Gap = as.numeric(Gap),
+         Country = fct_reorder(Country, Gap))
+
+palette_079 <- highlight_colors(
+  all_values  = levels(df_079$Country),
+  highlighted = c("United States", "OECD average"),
+  palette     = c(tpa_colors[1], tpa_colors[3]),   # red, gold
+  default     = tpa_colors[2]                       # navy
+)
+
+fig_079 <- ggplot(df_079, aes(Gap, Country, fill = Country)) +
+  geom_vline(xintercept = 0, color = "grey50", linewidth = LINE_WIDTH_REF) +
+  geom_col(width = 0.75, alpha = ALPHA_COL) +
+  geom_text(aes(label = sprintf("%.1f", Gap),
+                hjust = if_else(Gap >= 0, -0.2, 1.2)),
+            family = FONT_FAMILY,
+            fontface = "bold",
+            size = (DATA_LABEL_SIZE - 2) / .pt,
+            color = "grey25") +
+  scale_x_continuous(limits = c(-15, 20),
+                     breaks = seq(-15, 20, 5),
+                     expand = EXPAND_NONE) +
+  scale_fill_manual(values = palette_079) +
+  guides(fill = "none") +
+  labs_meta(meta, x = "Percentage point gap with the native-born") +
+  theme_horizontal_bar() +
+  theme(axis.text.y = element_text(size = AXIS_SIZE - 2))
+
+save_chart(fig_079, "fig_079", size = "long")
+```
+
+# Figure 80 - Gross Domestic Expenditure on R&D as a Share of GDP, by Selected Economy (1991-2023)
+```{r figure 080}
+meta <- get_meta("fig_080")
+df   <- read_country_lines("fig_080", group_col = "Country", value_col = "Share")
+fig  <- plot_country_lines(df, meta, "R&D as share of GDP",
+                           value_col = "Share",
+                           label_fmt = fmt_pct_1,
+                           y_args    = list(
+                             labels = label_number(suffix = "%"),
+                             limits = c(0, 5.2),
+                             breaks = seq(0, 5, 1),
+                             expand = EXPAND_BAR_TIGHT
+                           ))
+save_chart(fig, "fig_080")
+```
+
+# Figure 81 - Trends in Share of International Student Enrollment in STEM Fields in U.S. Higher Education, by Selected Country (2009-2024)
+```{r figure 081}
+meta <- get_meta("fig_081")
+df   <- read_country_lines("fig_081", group_col = "Country", value_col = "Share")
+fig  <- plot_country_lines(df, meta, "STEM share of country's U.S. enrollment",
+                           value_col = "Share",
+                           label_fmt = fmt_pct_0,
+                           y_args    = list(
+                             labels = label_number(suffix = "%"),
+                             limits = c(20, 90),
+                             breaks = seq(20, 90, 10),
+                             expand = EXPAND_LINE
+                           ))
+save_chart(fig, "fig_081")
+```
+
+# Figure 82 - Share of H-1B Approvals - Top 10 Companies by Count vs. All Other Companies (2009-2025)
+```{r figure 082}
+meta <- get_meta("fig_082")
+
+df_082 <- read_fig("fig_082") %>%
+  rename(Year = `Company Normalized`) %>%
+  filter(!is.na(Year)) %>%
+  mutate(Year = as.numeric(Year)) %>%
+  select(Year,
+         `Top 10 companies`    = `Top 10 Companies by Count`,
+         `All other companies` = `All Other Companies`) %>%
+  pivot_longer(-Year, names_to = "Group", values_to = "Share") %>%
+  filter(!is.na(Share)) %>%
+  mutate(Share = Share * 100,
+         Group = factor(Group, levels = c("Top 10 companies",
+                                          "All other companies")))
+
+labels_082 <- fl_by_group(df_082, Year, Share, Group)
+
+palette_082 <- c(
+  "Top 10 companies"    = tpa_colors[2],
+  "All other companies" = tpa_colors[6]
+)
+
+fig_082 <- ggplot(df_082, aes(Year, Share, color = Group, group = Group)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_082,
+    mapping      = aes(label = fmt_pct_1(Share)),
+    direction    = "y",
+    with_segment = FALSE
+  ) +
+  scale_x_years(df_082$Year, by = 1) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(0, 80),
+                     breaks = seq(0, 80, 10),
+                     expand = EXPAND_BAR_TIGHT) +
+  scale_color_manual(values = palette_082) +
+  labs_meta(meta, y = "Share of H-1B approvals") +
+  theme_tpa()
+
+save_chart(fig_082, "fig_082")
+```
+
+# Figure 83 - Year of Last Enrollment Among Students Who Did Not Complete a Degree, by Cohort
+```{r figure 083}
+meta <- get_meta("fig_083")
+
+df_083 <- read_fig("fig_083") %>%
+  rename(Cohort = Year) %>%
+  select(-`Attained Degree by Final Survey Year`) %>%
+  pivot_longer(-Cohort, names_to = "Category", values_to = "Pct") %>%
+  filter(!is.na(Pct)) %>%
+  mutate(
+    Category = case_when(
+      str_detect(Category, "year 1")         ~ "Year 1",
+      str_detect(Category, "year 2")         ~ "Year 2",
+      str_detect(Category, "year 3")         ~ "Year 3",
+      str_detect(Category, "year 4")         ~ "Year 4",
+      str_detect(Category, "year 5")         ~ "Year 5",
+      str_detect(Category, "year 6")         ~ "Year 6",
+      str_detect(Category, "still enrolled") ~ "Still enrolled"
+    ),
+    Category = factor(Category, levels = c(
+      "Year 1", "Year 2", "Year 3", "Year 4",
+      "Year 5", "Year 6", "Still enrolled"
+    )),
+    Cohort = factor(Cohort, levels = c("1996/2001", "2004/2009", "2012/2017"))
+  )
+
+palette_083 <- c(
+  "1996/2001" = tpa_colors[2],   # navy
+  "2004/2009" = tpa_colors[1],   # red
+  "2012/2017" = tpa_colors[4]    # green
+)
+
+fig_083 <- ggplot(df_083, aes(Category, Pct, fill = Cohort)) +
+  geom_col_grouped() +
+  geom_text(aes(label = sprintf("%.1f", Pct)),
+            position = pos_dodge_grouped(),
+            vjust = -0.5,
+            family = FONT_FAMILY,
+            fontface = "bold",
+            size = (DATA_LABEL_SIZE - 2) / .pt,
+            color = "grey25") +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                   expand = EXPAND_BAR_XLARGE) +
+  scale_fill_manual(values = palette_083) +
+  labs_meta(meta, y = "Share of students") +
+  theme_tpa() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+save_chart(fig_083, "fig_083")
+```
+
+# Figure 84 - Bachelor's Degree Attainment and Enrollment Status for Students Who Entered STEM, by Cohort
+```{r figure 084}
+meta <- get_meta("fig_084")
+
+df_084 <- read_fig("fig_084") %>%
+  rename(Cohort   = Year,
+         Left     = `Left without return`,
+         Attained = `Degree Attained, Or Still Enrolled by Last Survey Year`) %>%
+  pivot_longer(-Cohort, names_to = "Status", values_to = "Pct") %>%
+  filter(!is.na(Pct)) %>%
+  mutate(
+    Status = factor(Status,
+                    levels = c("Left", "Attained"),
+                    labels = c("Left without return",
+                               "Degree attained or still enrolled")),
+    Cohort = factor(Cohort,
+                    levels = c("2012/2017", "2004/2009", "1996/2001", "1990/1994"))
+  )
+
+palette_084 <- c(
+  "Left without return"               = tpa_colors[2],   # navy
+  "Degree attained or still enrolled" = tpa_colors[1]    # red
+)
+
+fig_084 <- ggplot(df_084, aes(Pct, Cohort, fill = Status)) +
+  geom_col(width = BAR_WIDTH_NARROW, alpha = ALPHA_COL) +
+  geom_text(aes(label = fmt_pct_1(Pct)),
+            position = position_stack(vjust = 0.5),
+            color = "white", fontface = "bold",
+            family = FONT_FAMILY, size = DATA_LABEL_SIZE / .pt) +
+  scale_x_continuous(labels = label_number(suffix = "%"),
+                     limits = c(0, 100),
+                     breaks = seq(0, 100, 20),
+                     expand = EXPAND_NONE) +
+  scale_fill_manual(values = palette_084,
+                    breaks = c("Left without return",
+                               "Degree attained or still enrolled")) +
+  labs_meta(meta, x = "Share of cohort") +
+  theme_horizontal_bar()
+
+save_chart(fig_084, "fig_084")
+```
+
+# Figure 85 - Participants in Optional Practical Training (OPT),OPT Participants (Overall and STEM)
+```{r figure 085}
+meta <- get_meta("fig_085")
+
+df_085 <- read_fig("fig_085") %>%
+  filter(!is.na(Year)) %>%
+  rename(Share = `Share of All International Students`) %>%
+  mutate(across(everything(), as.numeric))
+
+scale_factor <- dual_axis_scale(
+  primary_max   = 350000,
+  secondary_max = 30
+)
+
+fig_085 <- ggplot(df_085, aes(Year)) +
+  geom_col(aes(y = Count, fill = "Count"),
+         width = 0.7, alpha = ALPHA_COL_LIGHT) +
+  geom_line(aes(y = Share * scale_factor, color = "Share"),
+          linewidth = LINE_WIDTH) +
+  scale_x_years(df_085$Year) +
+  scale_y_continuous(
+    name = "Number of international students",
+    labels = label_comma(),
+    limits = c(0, 350000),
+    expand = EXPAND_TIGHT_TOP,
+    sec.axis = sec_axis_scaled(scale_factor,
+                               name = "Share of all international students",
+                               labels = label_number(suffix = "%"))
+  ) +
+  scale_fill_manual(name = NULL,
+                    values = c("Count" = tpa_colors[2])) +
+  scale_color_manual(name = NULL,
+                     values = c("Share" = tpa_colors[1])) +
+  labs_meta(meta) +
+  theme_dual_axis()
+
+save_chart(fig_085, "fig_085")
+```
+
+# Figure 86 - Top Computer Science University Rankings by CSRankings.com (2000 vs 2025)
+```{r figure 086, fig.height=10}
+meta <- get_meta("fig_086")
+
+df_086 <- read_fig("fig_086") %>%
+  mutate(
+    rank_2000 = suppressWarnings(as.numeric(as.character(`2000`))),
+    rank_2025 = suppressWarnings(as.numeric(as.character(`2025`))),
+    delta     = rank_2000 - rank_2025,
+    direction = case_when(
+      is.na(rank_2000) ~ "New",
+      delta > 0        ~ "Improved",
+      delta < 0        ~ "Declined",
+      TRUE             ~ "Unchanged"
+    ),
+    csv_order = row_number()
+  ) %>%
+  arrange(rank_2025, csv_order) %>%
+  mutate(Institution = factor(Institution, levels = rev(Institution)))
+
+df_arrows      <- df_086 %>% filter(!is.na(rank_2000))
+df_points_only <- df_086 %>% filter(is.na(rank_2000))
+
+palette_086 <- c(
+  "Improved" = tpa_colors[4],   # green
+  "Declined" = tpa_colors[1],   # red
+  "New"      = "grey60"
+)
+
+fig_086 <- ggplot(df_086, aes(y = Institution)) +
+  geom_segment(
+    data = df_arrows,
+    aes(x = rank_2000, xend = rank_2025,
+        yend = Institution, color = direction),
+    arrow = arrow(length = unit(0.18, "cm"), type = "closed"),
+    linewidth = 0.7
+  ) +
+  geom_point(
+    data = df_points_only,
+    aes(x = rank_2025, color = direction),
+    size = POINT_SIZE,
+    show.legend = FALSE
+  ) +
+  # 2000 rank labels (arrow tail)
+  geom_text(
+    data = df_arrows %>% filter(direction == "Improved"),
+    aes(x = rank_2000, label = rank_2000),
+    hjust = 1.3,
+    size = (DATA_LABEL_SIZE - 3) / .pt,
+    family = FONT_FAMILY,
+    color = "grey25"
+  ) +
+  geom_text(
+    data = df_arrows %>% filter(direction == "Declined"),
+    aes(x = rank_2000, label = rank_2000),
+    hjust = -0.3,
+    size = (DATA_LABEL_SIZE - 3) / .pt,
+    family = FONT_FAMILY,
+    color = "grey25"
+  ) +
+  # 2025 rank labels (arrow head)
+  geom_text(
+    data = df_arrows %>% filter(direction == "Improved"),
+    aes(x = rank_2025, label = rank_2025),
+    hjust = -0.3,
+    size = (DATA_LABEL_SIZE - 3) / .pt,
+    family = FONT_FAMILY,
+    color = "grey25"
+  ) +
+  geom_text(
+    data = df_arrows %>% filter(direction == "Declined"),
+    aes(x = rank_2025, label = rank_2025),
+    hjust = 1.3,
+    size = (DATA_LABEL_SIZE - 3) / .pt,
+    family = FONT_FAMILY,
+    color = "grey25"
+  ) +
+  # Delta labels on the far right
+  geom_text(
+    data = df_arrows,
+    aes(x = -8, label = sprintf("%+d", delta), color = direction),
+    hjust = 0,
+    fontface = "bold",
+    size = (DATA_LABEL_SIZE - 2) / .pt,
+    family = FONT_FAMILY,
+    show.legend = FALSE
+  ) +
+  scale_x_reverse(
+    breaks = seq(0, 160, 20),
+    limits = c(165, -18),
+    expand = EXPAND_NONE
+  ) +
+  scale_color_manual(
+    values = palette_086,
+    breaks = c("Improved", "Declined"),
+    labels = c("Improved ranking", "Declined ranking")
+  ) +
+  guides(color = guide_legend(override.aes = list(linewidth = 1.2))) +
+  labs_meta(meta, x = "Rank") +
+  theme_horizontal_bar() +
+  theme(
+    axis.text.y = element_text(size = AXIS_SIZE - 2),
+    legend.position = "bottom"
+  )
+
+save_chart(fig_086, "fig_086", size = "long")
+```
+
+# Figure 87 - Trends in H-1B Denials, by Application Type (2009-2025)
+```{r figure 087}
+meta <- get_meta("fig_087")
+df   <- read_hb_denials("fig_087")
+fig  <- plot_hb_denials(df, meta, "H-1B denials")
+save_chart(fig, "fig_087")
+```
+
+# Figure 88 - Trends in H-1B Denials for NAICS Code 54 - Professional, Scientific, and Technical Services, by Application Type (2009-2025)
+```{r figure 088}
+meta <- get_meta("fig_088")
+df   <- read_hb_denials("fig_088")
+fig  <- plot_hb_denials(df, meta, "H-1B denials (NAICS 54)")
+save_chart(fig, "fig_088")
+```
+
+# Figure 89 - Trends in Science and Engineering Research Doctorate Recipients from U.S. Colleges and Universities, by Year and by Sex (1993-2023)
+```{r figure 089}
+meta <- get_meta("fig_089")
+
+df_089 <- read_fig("fig_089") %>%
+  filter(!is.na(Year)) %>%
+  select(Year, Male, Female) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Sex", values_to = "Count") %>%
+  filter(!is.na(Count)) %>%
+  mutate(Sex = factor(Sex, levels = c("Male", "Female"))) %>%
+  order_by_latest(Sex, Count)
+
+palette_089 <- c("Male" = tpa_colors[2], "Female" = tpa_colors[1])
+
+fig <- plot_country_lines(df_089, meta, "Doctorate recipients",
+                          group_col   = "Sex",
+                          value_col   = "Count",
+                          label_fmt   = label_comma(),
+                          pad_right   = PAD_RIGHT_NARROW,
+                          color_scale = scale_color_manual(values = palette_089))
+save_chart(fig, "fig_089")
+```
+
+# Figure 90 - Trends in Science and Engineering Research Doctorate Recipients from U.S. Colleges and Universities, by Year and by Citizenship Status (1978-2023)
+```{r figure 090}
+meta <- get_meta("fig_090")
+
+df_090 <- read_fig("fig_090") %>%
+  filter(!is.na(Year)) %>%
+  rename(`U.S. citizens and permanent residents` = `U.S. citizen or permanent resident`,
+         `Temporary visa holders`                = `Temporary visa holder`,
+         `Unknown citizenship`                   = `Unknown citizenship`) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Status", values_to = "Count") %>%
+  filter(!is.na(Count)) %>%
+  order_by_total(Status, Count)
+
+palette_090 <- c(
+  "U.S. citizens and permanent residents" = tpa_colors[1],
+  "Temporary visa holders"                = tpa_colors[4],
+  "Unknown citizenship"                   = tpa_colors[8]
+)
+
+fig_090 <- ggplot(df_090, aes(Year, Count, fill = Status)) +
+  geom_area(alpha = ALPHA_AREA) +
+  scale_x_years(df_090$Year) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = EXPAND_BAR) +
+  scale_fill_manual(values = palette_090) +
+  labs_meta(meta, y = "Doctorate recipients") +
+  theme_tpa()
+
+save_chart(fig_090, "fig_090")
+```
+
+# Figure 91 - Share of Degree Completions by U.S. Nonresidents, by Field - Bachelors (2003-2023)
+```{r figure 091}
+meta <- get_meta("fig_091")
+df   <- read_nonresident_field("fig_091")
+fig  <- plot_nonresident_field(df, meta, "Nonresident share of bachelor's completions")
+save_chart(fig, "fig_091")
+```
+
+# Figure 92 - Share of Degree Completions by U.S. Nonresidents, by Field - Masters (2003-2023)
+```{r figure 092}
+meta <- get_meta("fig_092")
+df   <- read_nonresident_field("fig_092")
+fig  <- plot_nonresident_field(df, meta, "Nonresident share of master's completions")
+save_chart(fig, "fig_092")
+```
+
+# Figure 93 - Share of Degree Completions by U.S. Nonresidents, by Field - Doctoral (2003-2023)
+```{r figure 093}
+meta <- get_meta("fig_093")
+df   <- read_nonresident_field("fig_093")
+fig  <- plot_nonresident_field(df, meta, "Nonresident share of doctoral completions")
+save_chart(fig, "fig_093")
+```
+
+# Figure 94 - Trends in International Student Doctorate Completions in STEM Fields in U.S. Higher Education, by Country (2009-2024)
+```{r figure 094}
+meta <- get_meta("fig_094")
+
+df_094 <- read_fig("fig_094") %>%
+  rename(Year = `Country or economy and field`) %>%
+  mutate(across(-Year, as.character)) %>%
+  pivot_longer(-Year, names_to = "Country", values_to = "Count") %>%
+  mutate(
+    Year  = as.numeric(Year),
+    Count = suppressWarnings(as.numeric(Count))
+  ) %>%
+  filter(!is.na(Year), !is.na(Count), Count > 0) %>%
+  order_by_latest(Country, Count)
+
+labels_094 <- last_by_group(df_094, Year, Country)
+
+fig_094 <- ggplot(df_094, aes(Year, Count, color = Country, group = Country)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_094,
+    mapping      = aes(label = paste0(Country, ": ", label_comma()(Count))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_094$Year, by = 1, pad_right = PAD_RIGHT_STANDARD) +
+  scale_y_log10(labels = label_comma(),
+                breaks  = c(50, 100, 500, 1000, 2500, 5000),
+                expand  = EXPAND_LINE) +
+  scale_color_manual(values = c(tpa_colors, "grey40")) +
+  guides(color = "none") +
+  labs_meta(meta, y = "Doctorate completions (log scale)") +
+  theme_tpa()
+
+save_chart(fig_094, "fig_094")
+```
+
+# Figure 95 - Trends in Post-Doctoral Appointees in Science, by Citizenship Status (1997-2023)
+```{r figure 095}
+meta <- get_meta("fig_095")
+df   <- read_citizenship_area("fig_095")
+fig  <- plot_citizenship_area(df, meta, "Postdoctoral appointees")
+save_chart(fig, "fig_095")
+```
+
+# Figure 96 - Trends in Post-Doctoral Appointees in Engineering, by Citizenship Status (1997-2023)
+```{r figure 096}
+meta <- get_meta("fig_096")
+df   <- read_citizenship_area("fig_096")
+fig  <- plot_citizenship_area(df, meta, "Postdoctoral appointees")
+save_chart(fig, "fig_096")
+```
+
+# Figure 97 - Trends in Post-Doctoral Appointees in Health, by Citizenship Status (1997-2023)
+```{r figure 097}
+meta <- get_meta("fig_097")
+df   <- read_citizenship_area("fig_097")
+fig  <- plot_citizenship_area(df, meta, "Postdoctoral appointees")
+save_chart(fig, "fig_097")
+```
+
+# Figure 98 - Trends in Doctoral Production by Degree Level
+```{r figure 98}
+meta <- get_meta("fig_098")
+
+m1 <- function(x) sprintf("%.1fM", x / 1e6)
+
+df_098 <- read_levels("fig_098", value_col = "Count",
+                      levels_order = c("Bachelors", "Masters", "Doctorate"))
+
+last_098  <- last_by_group(df_098, Year, Level)
+first_098 <- df_098 %>% group_by(Level) %>% slice_min(Year, n = 1) %>% ungroup()
+
+fig_098 <- ggplot(df_098, aes(Year, Count, color = Level, group = Level)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = last_098,
+    mapping      = aes(label = paste0(Level, ": ", m1(Count))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  geom_label_repel_tpa(
+    data         = first_098,
+    mapping      = aes(label = m1(Count)),
+    nudge_x      = -0.5,
+    hjust        = 1,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_continuous(
+    breaks = seq(min(df_098$Year), max(df_098$Year), 1),
+    expand = expansion(mult = c(0.05, PAD_RIGHT_NARROW))
+  ) +
+  scale_y_continuous(labels = m1, expand = EXPAND_LINE) +
+  scale_color_levels() +
+  guides(color = "none") +
+  labs_meta(meta, y = "Degrees awarded") +
+  theme_tpa()
+
+save_chart(fig_098, "fig_098")
+```
+
+# Figure 99 - International Student Share of All Degree Completions
+```{r figure 099}
+meta <- get_meta("fig_099")
+pct  <- label_percent(accuracy = 1)
+df_099 <- read_levels(
+  "fig_099",
+  value_col    = "Share",
+  levels_order = c("Bachelors", "Masters",
+                   "All Doctorates (IPEDS)", "Research Doctorates (SED)")
+) %>%
+  filter(!is.na(Share))
+last_099  <- last_by_group(df_099, Year, Level)
+first_099 <- df_099 %>% group_by(Level) %>% slice_min(Year, n = 1) %>% ungroup()
+
+fig_099 <- ggplot(df_099, aes(Year, Share, color = Level, group = Level)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = last_099,
+    mapping      = aes(label = paste0(pct(Share), " - ", Level)),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  geom_label_repel_tpa(
+    data         = first_099,
+    mapping      = aes(label = pct(Share)),
+    nudge_x      = -0.5,
+    hjust        = 1,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_continuous(
+    breaks = seq(min(df_099$Year), max(df_099$Year), 2),
+    expand = expansion(mult = c(0.05, .50))
+  ) +
+  scale_y_continuous(labels = pct, expand = EXPAND_LINE_WIDE) +
+  scale_color_levels() +
+  guides(color = "none") +
+  labs_meta(meta, y = "Share of completions") +
+  theme_tpa()
+save_chart(fig_099, "fig_099")
+```
+# Figure 100 - Trends in Research Doctorate Recipients from U.S. Colleges and Universities, All Fields, by Year (1958-2023)
+```{r figure 100}
+meta <- get_meta("fig_100")
+
+df_100 <- read_fig("fig_100") %>%
+  mutate(
+    across(everything(), as.numeric),
+    stem_share = 100 * `Just S&E fields` / `Doctorate recipients (number)`
+  )
+
+labels_100 <- first_last_peak(
+  df_100,
+  Year,
+  `Doctorate recipients (number)`
+)
+
+stem_labels <- bind_rows(
+  df_100 %>% slice_min(Year, n = 1),
+  df_100 %>% slice_max(stem_share, n = 1)
+) %>%
+  distinct(Year, .keep_all = TRUE)
+
+fig_100 <- ggplot(df_100, aes(x = Year)) +
+
+  # STEM area
+  geom_ribbon(
+    aes(
+      ymin = 0,
+      ymax = `Just S&E fields`
+    ),
+    fill = tpa_colors[2],
+    alpha = 0.30
+  ) +
+
+  # Non-STEM area stacked above STEM
+  geom_ribbon(
+    aes(
+      ymin = `Just S&E fields`,
+      ymax = `Doctorate recipients (number)`
+    ),
+    fill = "grey80",
+    alpha = 0.45
+  ) +
+
+  # Original line
+  geom_line(
+    aes(y = `Doctorate recipients (number)`),
+    linewidth = LINE_WIDTH,
+    color = tpa_colors[1]
+  ) +
+
+  # Total doctorate labels
+  geom_label_repel_tpa(
+    data = labels_100,
+    mapping = aes(
+      y = `Doctorate recipients (number)`,
+      label = fmt_num_k(`Doctorate recipients (number)`)
+    ),
+    color = tpa_colors[1],
+    nudge_y = 5000,
+    with_segment = TRUE
+  ) +
+
+  # STEM share labels (first year + peak share year)
+  geom_label_repel_tpa(
+    data = stem_labels,
+    mapping = aes(
+      y = `Just S&E fields`,
+      label = paste0(round(stem_share), "%")
+    ),
+    color = tpa_colors[2],
+    nudge_y = -5000,
+    with_segment = TRUE
+  ) +
+
+  scale_x_years(df_100$Year) +
+  scale_y_continuous(
+    labels = label_comma(),
+    expand = EXPAND_LINE_TALL
+  ) +
+
+  labs_meta(meta, y = "Doctorate recipients") +
+  theme_tpa()
+
+save_chart(fig_100, "fig_100")
+```
+
+----
+
+
+# Table 1 - US Universities Count in Top Universities Over Time
+```{r table 1}
+meta    <- get_meta("tab_001")
+tab_001 <- build_ranking_table("tab_001", meta, integer_cols = TRUE)
+tab_001
+```
+
+# Table 2 - US Universities Average Rank - All Fields Combined Trend
+```{r table 002}
+meta    <- get_meta("tab_002")
+tab_002 <- build_ranking_table("tab_002", meta, integer_cols = FALSE)
+tab_002
+```
+
+# Table 3 - Visa Processing Wait Time - EB1/EB2/EB3 - All Countries
+```{r table 003}
+meta    <- get_meta("tab_003")
+tab_003 <- build_eb_table("tab_003", meta)
+tab_003
+```
+
+# Table 4 - Visa Processing Wait Time - EB1/EB2/EB3 - China
+```{r table 004}
+meta    <- get_meta("tab_004")
+tab_004 <- build_eb_table("tab_004", meta)
+tab_004
+```
+
+
+# Table 5 - Visa Processing Wait Time - EB1/EB2/EB3 - India
+```{r table 005}
+meta    <- get_meta("tab_005")
+tab_005 <- build_eb_table("tab_005", meta)
+tab_005
+```
+
+# Table 6 - Change (1995-2024) in Int. Share of STEM Degrees Awarded by Field - Bachelors
+```{r table 006}
+meta_a <- get_meta("tab_006a")
+meta_b <- get_meta("tab_006b")
+meta_c <- get_meta("tab_006c")
+meta_d  <- get_meta("tab_006d")
+
+tab_006a <- build_change_table("tab_006a", meta_a)
+tab_006b <- build_change_table("tab_006b", meta_b)
+tab_006c <- build_change_table("tab_006c", meta_c)
+tab_006d <- build_change_table_wide("tab_006d", meta_d)
+
+
+tab_006a
+tab_006b
+tab_006c
+tab_006d
+```
+
+---
+
+# Export to PDF 
+```{r export_pdf, include=FALSE}
+library(magick)
+library(pdftools)
+
+# ---- Page dimensions ----------------------------------------
+page_w_px  <- round(8.5  * 300)
+page_h_px  <- round(11.0 * 300)
+margin_px  <- round(0.20 * 300)
+content_h  <- page_h_px - (margin_px * 2)
+
+# ---- Chart and table manifests ------------------------------
+chart_files <- c(
+  "fig_001", "fig_002", "fig_003", "fig_004", "fig_005",
+  "fig_006", "fig_007", "fig_008", "fig_009", "fig_010",
+  "fig_011", "fig_012", "fig_013", "fig_014", "fig_015",
+  "fig_016", "fig_017", "fig_018", "fig_019", "fig_020",
+  "fig_021", "fig_022", "fig_023", "fig_024", "fig_025",
+  "fig_026", "fig_027", "fig_028", "fig_029", "fig_030",
+  "fig_031", "fig_032", "fig_033", "fig_034", "fig_035",
+  "fig_036", "fig_037",
+  "fig_038a", "fig_038b", "fig_038c", "fig_038d",
+  "fig_039", "fig_040", "fig_041", "fig_042", "fig_043",
+  "fig_044", "fig_045", "fig_046", "fig_047",
+  "fig_048",
+  "fig_048_acl", "fig_048_acml", "fig_048_aistats", "fig_048_coling",
+  "fig_048_colt", "fig_048_corl", "fig_048_cvpr", "fig_048_emnlp",
+  "fig_048_iccv", "fig_048_iclr", "fig_048_icml", "fig_048_icra",
+  "fig_048_ijcai", "fig_048_iros", "fig_048_naacl", "fig_048_nips",
+  "fig_048_rss", "fig_048_siggraphasia", "fig_048_uai", "fig_048_wacv",
+  "fig_049", "fig_050", "fig_051", "fig_052", "fig_053",
+  "fig_054", "fig_055", "fig_056", "fig_057", "fig_058",
+  "fig_059", "fig_060", "fig_061", "fig_062", "fig_063",
+  "fig_064", "fig_065", "fig_066", "fig_067", "fig_068",
+  "fig_069", "fig_070", "fig_071", "fig_072", "fig_073",
+  "fig_074", "fig_075", "fig_076", "fig_077", "fig_078",
+  "fig_079", "fig_080", "fig_081", "fig_082", "fig_083",
+  "fig_084", "fig_085", "fig_086", "fig_087", "fig_088",
+  "fig_089", "fig_090", "fig_091", "fig_092", "fig_093",
+  "fig_094", "fig_095", "fig_096", "fig_097", "fig_098",
+  "fig_099", "fig_100"
+)
+
+table_files <- c(
+  "tab_001", "tab_002", "tab_003", "tab_004", "tab_005"
+)
+
+# ---- TOC page count -----------------------------------------
+# Calculate upfront so content page numbers are correct from the start
+toc_per_page <- 30
+n_toc_pages  <- ceiling((length(chart_files) + length(table_files)) / toc_per_page)
+
+# ---- Helper: stamp page number on an image ------------------
+stamp_page_number <- function(img, page_num) {
+  image_annotate(
+    img,
+    text     = as.character(page_num),
+    gravity  = "South",
+    location = "+0+40",
+    size     = 36,
+    font     = "Source Sans 3",
+    color    = "grey50"
+  )
+}
+
+# ---- Helper: png → list of magick images (one per page) -----
+png_to_pages <- function(name, folder) {
+  path <- file.path(folder, paste0(name, ".png"))
+  if (!file.exists(path)) {
+    message("Skipping missing file: ", path)
+    return(NULL)
+  }
+
+  img  <- image_read(path)
+  info <- image_info(img)
+
+  if (info$height > content_h) {
+    n_pages <- ceiling(info$height / content_h)
+    lapply(seq_len(n_pages), function(i) {
+      y_start <- (i - 1) * content_h
+      h       <- min(content_h, info$height - y_start)
+      slice   <- image_crop(img, paste0(info$width, "x", h, "+0+", y_start))
+      page    <- image_blank(page_w_px, page_h_px, color = "white")
+      image_composite(page, slice, offset = paste0("+", margin_px, "+", margin_px))
+    })
+  } else {
+    page <- image_blank(page_w_px, page_h_px, color = "white")
+    page <- image_composite(page, img, offset = paste0("+", margin_px, "+", margin_px))
+    list(page)
+  }
+}
+
+# ---- Build content pages and collect TOC entries ------------
+all_items <- list(
+  list(files = chart_files, folder = "final_charts"),
+  list(files = table_files, folder = "final_tables")
+)
+
+content_pages <- list()
+toc_entries   <- list()
+page_counter  <- n_toc_pages + 1L
+
+for (group in all_items) {
+  for (name in group$files) {
+    pages <- png_to_pages(name, group$folder)
+    if (is.null(pages)) next
+
+    toc_entries[[length(toc_entries) + 1]] <- list(
+      name  = name,
+      page  = page_counter,
+      title = tryCatch(get_meta(name)$title, error = function(e) name)
+    )
+
+    content_pages <- c(content_pages, pages)
+    page_counter  <- page_counter + length(pages)
+  }
+}
+
+# ---- Build TOC as ggplot ------------------------------------
+toc_df <- data.frame(
+  id    = sapply(toc_entries, `[[`, "name"),
+  page  = sapply(toc_entries, `[[`, "page"),
+  title = sapply(toc_entries, `[[`, "title"),
+  stringsAsFactors = FALSE
+)
+
+toc_chunks <- split(toc_df, ceiling(seq_len(nrow(toc_df)) / toc_per_page))
+
+toc_pages <- lapply(seq_along(toc_chunks), function(i) {
+  chunk      <- toc_chunks[[i]]
+  max_id_len <- max(nchar(chunk$id))
+
+  rows <- mapply(function(id, pg, title) {
+    id_pad <- formatC(id,            width = max_id_len, flag = "-")
+    pg_str <- formatC(paste0("p.", pg), width = 6,      flag = "-")
+    title  <- if (nchar(title) > 60) paste0(substr(title, 1, 57), "...") else title
+    paste0(id_pad, "   ", pg_str, "   ", title)
+  }, chunk$id, chunk$page, chunk$title)
+
+  heading <- if (i == 1) "Table of Contents" else "Table of Contents (continued)"
+
+  p <- ggplot() +
+    annotate("text",
+             x = 0.05, y = 0.97,
+             label    = heading,
+             hjust    = 0, vjust = 1,
+             family   = FONT_FAMILY,
+             fontface = "bold",
+             size     = 7,
+             color    = tpa_colors[1]) +
+    annotate("segment",
+             x = 0.05, xend = 0.95,
+             y = 0.955, yend = 0.955,
+             color = tpa_colors[1], linewidth = 0.5) +
+    annotate("text",
+             x = 0.05, y = 0.93,
+             label      = paste(rows, collapse = "\n"),
+             hjust      = 0, vjust = 1,
+             family     = "mono",
+             size       = 3.2,
+             color      = "grey20",
+             lineheight = 1.4) +
+    scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) +
+    scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+    theme_void() +
+    theme(plot.background = element_rect(fill = "white", color = NA))
+
+  tmp <- tempfile(fileext = ".png")
+  ggsave(tmp, p, width = 8.5, height = 11, dpi = 300, bg = "white")
+  image_read(tmp)
+})
+
+# ---- Stamp page numbers -------------------------------------
+toc_pages_numbered <- lapply(seq_along(toc_pages), function(i) {
+  stamp_page_number(toc_pages[[i]], i)
+})
+
+content_pages_numbered <- lapply(seq_along(content_pages), function(i) {
+  stamp_page_number(content_pages[[i]], i + n_toc_pages)
+})
+
+# ---- Write single-page PDFs then combine --------------------
+dir.create("final_charts/tmp_pages", showWarnings = FALSE)
+
+all_pages <- c(toc_pages_numbered, content_pages_numbered)
+
+pdf_paths <- mapply(function(img, i) {
+  path <- file.path("final_charts/tmp_pages", sprintf("page_%04d.pdf", i))
+  image_write(img, path = path, format = "pdf", density = 300)
+  path
+}, all_pages, seq_along(all_pages))
+
+pdftools::pdf_combine(unlist(pdf_paths), output = "report.pdf")
+
+# ---- Clean up -----------------------------------------------
+file.remove(unlist(pdf_paths))
+unlink("final_charts/tmp_pages", recursive = TRUE)
+
+message("Done — ", length(all_pages), " pages written as report.pdf to the project directory")
+```

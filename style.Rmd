@@ -1,0 +1,108 @@
+# TPA Figure Style Guide
+
+## Colors
+
+**Primary palette** (`tpa_colors`)
+| Index | Hex | Use |
+|-------|-----|-----|
+| 1 | #8c1515 | Primary series, China, denials, red emphasis |
+| 2 | #2F5D7C | Secondary series, United States, approvals |
+| 3 | #F5B427 | Tertiary series, gold emphasis |
+| 4 | #92A045 | Fourth series, green emphasis |
+| 5 | #5E3762 | Fifth series, purple |
+| 6 | #F68F1F | Sixth series, orange |
+| 7 | #5D4738 | Seventh series, brown |
+| 8 | #918881 | Eighth series, grey |
+| 9 | #B9B4AC | Ninth series, light grey |
+
+**Named palettes** — always use these instead of inline tpa_colors references:
+- `level_colors` — Bachelors/Masters/Doctorate (gold/navy/red)
+- `field_colors` + `scale_color_fields()` — canonical STEM field colors, use whenever the same fields appear across multiple charts
+- `citizenship_colors` + `scale_fill_citizenship()` — US citizens vs temporary visa holders (red/green)
+- `hb_denial_colors` — H-1B new vs renewal denials (navy/red)
+- `country_colors` — US/China/India/etc for cross-country comparisons
+- `stem_gradient_colors` — field distribution stacked bars (navy→red gradient)
+
+**When to use `scale_color_tpa()`** — only when the series are not from a named category above and order does not need to be consistent across charts.
+
+---
+
+## Lines and areas
+
+| Constant | Value | Use |
+|----------|-------|-----|
+| `LINE_WIDTH` | 1 | All `geom_line` calls |
+| `LINE_WIDTH_LIGHT` | 0.9 | Line charts with 8+ overlapping series |
+| `ALPHA_AREA` | 0.95 | All `geom_area` calls |
+| `ALPHA_COL` | 0.90 | Standard `geom_col` |
+| `ALPHA_COL_LIGHT` | 0.60 | Bar in a bar+line dual-axis chart |
+
+---
+
+## Axes
+
+**pad_right** (right expansion on year axes for endpoint labels)
+| Constant | Value | Use |
+|----------|-------|-----|
+| `PAD_RIGHT_STANDARD` | 0.20 | Labels up to ~15 characters |
+| `PAD_RIGHT_WIDE` | 0.30 | Labels with country + value, or wrapped text |
+
+**expand**
+| Constant | Value | Use |
+|----------|-------|-----|
+| `EXPAND_BAR` | `expansion(mult = c(0, 0.05))` | Any chart where y starts at zero (bars, areas) |
+| `EXPAND_LINE` | `expansion(mult = c(0.02, 0.05))` | Line charts where bottom clipping would cut a series |
+
+---
+
+## Log scale breaks
+
+Standard break sets by magnitude:
+- Patent/H-1B counts: `c(10, 100, 1000, 5000, 10000, 50000)`
+- Enrollment counts: `c(1000, 5000, 10000, 50000, 100000, 250000)`
+- Valuation (millions): `c(10, 100, 1000, 10000, 100000, 500000)`
+
+---
+
+## Chart types and when to use them
+
+| Chart type | When |
+|------------|------|
+| `geom_area` stacked | Citizenship status over time, regional distributions |
+| `geom_line` with endpoint labels | Multi-series trends, always use `last_by_group` for labels |
+| `geom_col` bar | Single-series annual totals |
+| Dual-axis bar+line | When a count and a share need to share a time axis |
+| Log scale | Any count data spanning more than 2 orders of magnitude |
+| Heatmap | Percent change from baseline across fields and years |
+| Choropleth | Country-level counts or shares with geographic dimension |
+
+---
+
+## Label conventions
+
+- Endpoint labels: `paste0(Series, ": ", formatted_value)` — always include series name
+- Bar labels: first, last, and peak only via `first_last_peak()`
+- Percentage format: `fmt_pct_0` for whole numbers, `fmt_pct_1` for one decimal
+- Large counts: `fmt_num_k` under 1M, `fmt_num_m` under 1B
+- Dollar values: `fmt_dollar_m` or `fmt_dollar_b` depending on magnitude
+
+---
+
+## Sizes
+
+Standard: 8.0 × 5.5 inches
+Long: 8.0 × 11.0 inches (faceted charts, long horizontal bar charts)
+Extra long: 8.0 × 22.0 inches (fig_048 conference grid only)
+
+---
+
+## What goes where
+
+| Decision | File |
+|----------|------|
+| New color or palette | `theme.R` colors section, add a `scale_*` wrapper if used in 3+ charts |
+| New numeric constant (linewidth, alpha, expand) | `theme.R` constants section |
+| New data reader or transformer | `helpers.R` |
+| New plotter function | `helpers.R` if it uses existing layers, `chart_layers.R` if it defines a new geom or annotation |
+| New gt table builder | `tables.R` |
+| One-off chart logic | Inline in the Rmd chunk |
