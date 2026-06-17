@@ -217,9 +217,7 @@ save_chart(fig_005, "fig_005")
 meta <- get_meta("fig_006")
 
 fields_drop <- c(
-  "Agricultural/Animal/Plant/Veterinary Science and Related Fields",
-  "Natural Resources and Conservation",
-  "Architecture and Related Services"
+  "Agricultural/Animal/Plant/Veterinary Science and Related Fields"
 )
 
 eng_fields <- c(
