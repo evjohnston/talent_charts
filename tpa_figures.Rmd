@@ -3229,6 +3229,7 @@ fig_099 <- ggplot(df_099, aes(Year, Share, color = Level, group = Level)) +
   theme_tpa()
 save_chart(fig_099, "fig_099")
 ```
+
 # Figure 100 - Trends in Research Doctorate Recipients from U.S. Colleges and Universities, All Fields, by Year (1958-2023)
 ```{r figure 100}
 meta <- get_meta("fig_100")
@@ -3316,7 +3317,277 @@ fig_100 <- ggplot(df_100, aes(x = Year)) +
 save_chart(fig_100, "fig_100")
 ```
 
-----
+# Figure 101 - International Students as a Share of Total U.S. Higher Education Enrollment
+```{r fig_101}
+meta <- get_meta("fig_101")
+
+df_101 <- read_fig("fig_009") %>%
+  select(Year, value = "Share of Total US Enrollment") %>%        
+  mutate(across(everything(), as.numeric),
+         value = fill_gaps(Year, value))   
+
+labels_101 <- first_last_peak(df_101, Year, value)
+
+fig_101 <- ggplot(df_101, aes(Year, value)) +
+  geom_line(linewidth = LINE_WIDTH, color = tpa_colors[1]) +
+  geom_label_repel_tpa(
+    data         = labels_101,
+    mapping      = aes(label = label_percent(accuracy = 0.1)(value)), 
+    color        = tpa_colors[1],
+    nudge_y      = 0.004,                   
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_101$Year) +
+  scale_y_continuous(labels = label_percent(accuracy = 1),  
+                     expand = EXPAND_LINE_TALL) +
+  labs_meta(meta, y = "Share of total US enrollment") +     
+  theme_tpa()
+
+save_chart(fig_101, "fig_101")
+```
+
+# Figure 102 - International Students in U.S. Higher Education, Count by Academic Level
+```{r fig_102}
+meta <- get_meta("fig_102")
+
+df_102 <- read_fig("fig_102") %>%
+  rename(
+    `Graduate (unspecified)` = `Graduate - Unspecified`,
+    `Non-degree`             = `Non-Degree`,
+    OPT                      = `Optional Practical Training (OPT)`
+  ) %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Level", values_to = "Count") %>%
+  order_by_latest(Level, Count)
+
+labels_102 <- last_by_group(df_102, Year, Level)
+
+fig_102 <- ggplot(df_102, aes(Year, Count, color = Level, group = Level)) +
+  geom_line(linewidth = 1) +
+  geom_label_repel_tpa(
+    data = labels_102,
+    mapping = aes(label = paste0(Level, ": ", label_comma()(Count))),
+    nudge_x = 0.5,
+    hjust = 0,
+    direction = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_102$Year, pad_right = 0.50) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = expansion(mult = c(0.02, 0.05))) +
+  scale_color_manual(values = acad_level_colors) +
+  guides(color = "none") +
+  labs_meta(meta, y = "International students enrolled") +
+  theme_tpa()
+
+save_chart(fig_102, "fig_102")
+```
+
+# Figure 103 - International Students in U.S. Higher Education, Share by Academic Level
+```{r fig_103}
+meta <- get_meta("fig_103")
+
+df_103 <- read_fig("fig_103") %>%
+  rename(
+    `Graduate (unspecified)` = `Graduate - Unspecified`,
+    `Non-degree`             = `Non-Degree`,
+    OPT                      = `Optional Practical Training (OPT)`
+  ) %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Level", values_to = "Count") %>%
+  order_by_latest(Level, Count)
+
+labels_103 <- last_by_group(df_103, Year, Level)
+
+fig_103 <- ggplot(df_103, aes(Year, Count, color = Level, group = Level)) +
+  geom_line(linewidth = 1) +
+  geom_label_repel_tpa(
+    data = labels_103,
+    mapping = aes(label = paste0(Level, ": ", label_comma()(Count),"%")),
+    nudge_x = 0.5,
+    hjust = 0,
+    direction = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_103$Year, pad_right = 0.50) +
+  scale_y_continuous(labels = label_comma(),
+                     expand = expansion(mult = c(0.02, 0.05))) +
+  scale_color_manual(values = acad_level_colors) +
+  guides(color = "none") +
+  labs_meta(meta, y = "International students enrolled") +
+  theme_tpa()
+
+save_chart(fig_103, "fig_103")
+```
+
+# Figure 104 - International Students in U.S. Higher Education, Share by Academic Level
+```{r fig_104}
+meta <- get_meta("fig_104")
+
+df_104 <- read_fig("fig_104")
+
+fig_104 <- ggplot() +
+  block_arrow_layers(df_104, Category, Change,
+                     fills = arrow_fill,
+                     divider_after = 1) +
+  labs_meta(meta) +
+  theme_arrows()
+
+save_chart(fig_104, "fig_104", size = "standard")
+```
+
+# Figure 105 - Perspectives of Increases in International Enrollment
+```{r fig_105}
+meta <- get_meta("fig_105")
+
+df_105 <- read_fig("fig_105") %>%
+  rename(Reason = 1) %>%
+  mutate(across(-Reason, as.numeric)) %>%
+  pivot_longer(-Reason, names_to = "Cohort", values_to = "Share") %>%
+  filter(!is.na(Share)) %>%
+  mutate(
+    Cohort = factor(Cohort, levels = c("Fall 2018", "Fall 2021", "Fall 2025")),
+    Reason = str_wrap(Reason, width = 50),                 # <- lower width = narrower text column
+    Reason = factor(Reason, levels = rev(unique(Reason)))
+  )
+
+cohort_colors <- c(
+  "Fall 2018" = tpa_colors[1],
+  "Fall 2021" = tpa_colors[2],
+  "Fall 2025" = tpa_colors[3]
+)
+
+# Spread crowded value labels horizontally; gap is in percentage points.
+gap <- 4
+labels_105 <- df_105 %>%
+  group_by(Reason) %>%
+  arrange(Share, .by_group = TRUE) %>%
+  mutate(
+    spread  = accumulate(Share, ~ max(.y, .x + gap)),
+    label_x = spread - (mean(spread) - mean(Share))
+  ) %>%
+  ungroup()
+
+fig_105 <- ggplot(df_105, aes(Share, Reason, color = Cohort)) +
+  geom_point(size = 3.5) +
+  geom_text(
+    data = labels_105,
+    aes(x = label_x, label = paste0(Share, "%")),
+    nudge_y = -0.34,
+    size = (DATA_LABEL_SIZE - 2) / .pt,
+    fontface = "bold",
+    family = FONT_FAMILY,
+    show.legend = FALSE
+  ) +
+  scale_x_continuous(expand = expansion(mult = c(0.07, 0.07))) +
+  scale_y_discrete(expand = expansion(add = c(0.8, 0.6))) +
+  scale_color_manual(values = cohort_colors) +
+  guides(color = guide_legend(override.aes = list(size = 3.5))) +
+  coord_cartesian(clip = "off") +
+  labs_meta(meta) +
+  theme_dotplot()
+
+save_chart(fig_105, "fig_105", size="standard")
+```
+
+# Figure 106 - Perspectives of Decreases in International Enrollment
+```{r fig_106}
+meta <- get_meta("fig_106")
+
+df_106 <- read_fig("fig_106") %>%
+  rename(Reason = 1) %>%
+  mutate(across(-Reason, as.numeric)) %>%
+  pivot_longer(-Reason, names_to = "Cohort", values_to = "Share") %>%
+  filter(!is.na(Share)) %>%
+  mutate(
+    Cohort = factor(Cohort, levels = c("Fall 2018", "Fall 2021", "Fall 2025")),
+    Reason = str_wrap(Reason, width = 50),                 # <- lower width = narrower text column
+    Reason = factor(Reason, levels = rev(unique(Reason)))
+  )
+
+cohort_colors <- c(
+  "Fall 2018" = tpa_colors[1],
+  "Fall 2021" = tpa_colors[2],
+  "Fall 2025" = tpa_colors[3]
+)
+
+# Spread crowded value labels horizontally; gap is in percentage points.
+gap <- 4
+labels_106 <- df_106 %>%
+  group_by(Reason) %>%
+  arrange(Share, .by_group = TRUE) %>%
+  mutate(
+    spread  = accumulate(Share, ~ max(.y, .x + gap)),
+    label_x = spread - (mean(spread) - mean(Share))
+  ) %>%
+  ungroup()
+
+fig_106 <- ggplot(df_106, aes(Share, Reason, color = Cohort)) +
+  geom_point(size = 3.5) +
+  geom_text(
+    data = labels_106,
+    aes(x = label_x, label = paste0(Share, "%")),
+    nudge_y = -0.34,
+    size = (DATA_LABEL_SIZE - 2) / .pt,
+    fontface = "bold",
+    family = FONT_FAMILY,
+    show.legend = FALSE
+  ) +
+  scale_x_continuous(expand = expansion(mult = c(0.07, 0.07))) +
+  scale_y_discrete(expand = expansion(add = c(0.8, 0.6))) +
+  scale_color_manual(values = cohort_colors) +
+  guides(color = guide_legend(override.aes = list(size = 3.5))) +
+  coord_cartesian(clip = "off") +
+  labs_meta(meta) +
+  theme_dotplot()
+
+save_chart(fig_106, "fig_106", size="standard")
+```
+
+# Figure 107 - Institutional Undergraduate and Graduate Recruitment Priorities, Fall 2025
+```{r fig_107}
+meta <- get_meta("fig_107")
+
+panel_colors <- c(
+  "Undergraduate" = tpa_colors[1],   # gold
+  "Graduate"      = tpa_colors[2]     # teal (not in tpa_colors; swap for tpa_colors[2] navy for house palette)
+)
+
+track_max <- 1.0   # grey track length; nudge up toward ~1.1 if fills look too long
+
+df_107 <- read_fig("fig_107") %>%
+  transmute(
+    Rank                  = as.integer(str_remove(Rank, "Rank ")),
+    Undergraduate_Country = `Undergraduate Country`,
+    Undergraduate_Value   = as.numeric(`Undergraduate Percent`),
+    Graduate_Country      = `Graduate Country`,
+    Graduate_Value        = as.numeric(`Graduate Percent`)
+  ) %>%
+  pivot_longer(-Rank, names_to = c("Panel", ".value"), names_sep = "_") %>%
+  mutate(
+    Panel   = factor(Panel, levels = c("Undergraduate", "Graduate")),
+    Country = str_wrap(Country, width = 18),
+    Country = reorder_within(Country, -Rank, Panel)   # rank 1 on top, per panel
+  )
+
+fig_107 <- ggplot(df_107, aes(y = Country)) +
+  geom_col(aes(x = track_max), fill = "grey90", width = 0.65) +
+  geom_col(aes(x = Value, fill = Panel), width = 0.65) +
+  geom_text(aes(x = track_max, label = label_percent(accuracy = 1)(Value)),
+            hjust = -0.25, fontface = "bold", color = "grey20",
+            size = DATA_LABEL_SIZE / .pt, family = FONT_FAMILY) +
+  facet_wrap(~ Panel, scales = "free_y") +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.14))) +
+  scale_y_reordered() +
+  scale_fill_manual(values = panel_colors) +
+  coord_cartesian(clip = "off") +
+  labs_meta(meta) +
+  theme_bullet()
+
+save_chart(fig_107, "fig_107")
+```
+
+# SPLIT
 
 
 # Table 1 - US Universities Count in Top Universities Over Time
@@ -3416,11 +3687,11 @@ chart_files <- c(
   "fig_084", "fig_085", "fig_086", "fig_087", "fig_088",
   "fig_089", "fig_090", "fig_091", "fig_092", "fig_093",
   "fig_094", "fig_095", "fig_096", "fig_097", "fig_098",
-  "fig_099", "fig_100"
+  "fig_099", "fig_100", "fig_101", "fig_102", "fig_103"
 )
 
 table_files <- c(
-  "tab_001", "tab_002", "tab_003", "tab_004", "tab_005"
+  "tab_001", "tab_002", "tab_003", "tab_004", "tab_005", "tab_006a", "tab_006b", "tab_006c", "tab_006d"
 )
 
 # ---- TOC page count -----------------------------------------

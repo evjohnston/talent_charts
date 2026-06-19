@@ -51,6 +51,168 @@ theme_gt_tpa <- function(gt_tbl, meta = NULL) {
   tbl
 }
 
+# ---- Regional enrollment change table -----------------------
+# Expects a CSV with:
+# Year, Asia, Africa, Sub-saharan, Europe,
+# Latin America and Carribian, North America,
+# Oceania, Middle East and North Africa, Stateless
+
+build_region_table <- function(name, meta) {
+  
+  df <- read_fig(name)
+  
+  first_year <- min(df$Year, na.rm = TRUE)
+  last_year <- max(df$Year, na.rm = TRUE)
+  
+  first <- df %>%
+    filter(Year == first_year)
+  
+  last <- df %>%
+    filter(Year == last_year)
+  
+  region_cols <- c(
+    "Asia",
+    "Africa, Sub-saharan",
+    "Europe",
+    "Latin America and Carribian",
+    "North America",
+    "Oceania",
+    "Middle East and North Africa"
+  )
+  
+  first_total <- sum(first[region_cols], na.rm = TRUE)
+  last_total <- sum(last[region_cols], na.rm = TRUE)
+  
+  tbl_df <- tibble(
+    Region = region_cols,
+    
+    FirstYearCount = as.numeric(first[1, region_cols]),
+    
+    FirstYearShare =
+      100 * as.numeric(first[1, region_cols]) / first_total,
+    
+    LastYearCount = as.numeric(last[1, region_cols]),
+    
+    LastYearShare =
+      100 * as.numeric(last[1, region_cols]) / last_total
+    
+  ) %>%
+    mutate(
+      PctChangeCount =
+        ((LastYearCount - FirstYearCount) / FirstYearCount) * 100,
+      
+      PctChangeShare =
+        ((LastYearShare - FirstYearShare) / FirstYearShare) * 100
+    ) %>%
+    arrange(desc(PctChangeShare))
+  
+  count_lim <- max(abs(tbl_df$PctChangeCount), na.rm = TRUE)
+  share_lim <- max(abs(tbl_df$PctChangeShare), na.rm = TRUE)
+  
+  tbl_df %>%
+    gt(rowname_col = "Region", id = name) %>%
+    
+    fmt_integer(
+      columns = c(FirstYearCount, LastYearCount)
+    ) %>%
+    
+    fmt_number(
+      columns = c(FirstYearShare, LastYearShare),
+      decimals = 1,
+      pattern = "{x}%"
+    ) %>%
+    
+    fmt_number(
+      columns = c(PctChangeCount, PctChangeShare),
+      decimals = 1,
+      force_sign = TRUE,
+      pattern = "{x}%"
+    ) %>%
+    
+    tab_spanner(
+      label = "Enrollment",
+      columns = c(
+        FirstYearCount,
+        LastYearCount,
+        PctChangeCount
+      )
+    ) %>%
+    
+    tab_spanner(
+      label = "Share of Total",
+      columns = c(
+        FirstYearShare,
+        LastYearShare,
+        PctChangeShare
+      )
+    ) %>%
+    
+    cols_label(
+      FirstYearCount = as.character(first_year),
+      LastYearCount  = as.character(last_year),
+      PctChangeCount = "Change",
+      
+      FirstYearShare = as.character(first_year),
+      LastYearShare  = as.character(last_year),
+      PctChangeShare = "Change"
+    ) %>%
+    
+    data_color(
+      columns = PctChangeCount,
+      fn = scales::col_numeric(
+        palette = c(tpa_colors[2], "white", tpa_colors[1]),
+        domain = c(-count_lim, count_lim)
+      )
+    ) %>%
+    
+    data_color(
+      columns = PctChangeShare,
+      fn = scales::col_numeric(
+        palette = c(tpa_colors[2], "white", tpa_colors[1]),
+        domain = c(-share_lim, share_lim)
+      )
+    ) %>%
+    
+    cols_align(
+      align = "right",
+      columns = c(
+        FirstYearCount,
+        LastYearCount,
+        PctChangeCount,
+        FirstYearShare,
+        LastYearShare,
+        PctChangeShare
+      )
+    ) %>%
+    
+    tab_style(
+      style = cell_text(weight = "bold"),
+      locations = cells_body(
+        columns = c(PctChangeCount, PctChangeShare)
+      )
+    ) %>%
+    
+    tab_footnote(
+      footnote = paste(
+        "Counts represent international students by region of origin.",
+        "Shares are calculated as a percentage of all international students.",
+        "Change is the percent change between",
+        first_year, "and", last_year, "."
+      ),
+      locations = cells_column_spanners(
+        spanners = c("Enrollment", "Share of Total")
+      )
+    ) %>%
+    
+    theme_gt_tpa(meta = meta) %>%
+    opt_css(css = sprintf(
+      "#%s .gt_column_spanner { border-bottom-color: %s !important; }",
+      name, tpa_colors[1]
+    )) %>%
+    save_table(name, size = "long")
+  
+}
+
 # ---- Combined share-change table (all degrees) --------------
 # Used by tab 006d.
 # Expects Field plus {Degree}_FirstYear / _LastYear / _PctChangeInShare

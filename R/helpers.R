@@ -531,6 +531,15 @@ scale_color_stacked <- function(
   )
 }
 
+# ---- Per-facet ordering (for free_y facets) -----------------
+reorder_within <- function(x, by, within, fun = mean, sep = "___") {
+  stats::reorder(paste(x, within, sep = sep), by, FUN = fun)
+}
+
+scale_y_reordered <- function(...) {
+  scale_y_discrete(labels = function(x) sub("___.+$", "", x), ...)
+}
+
 # ---- Export -------------------------------------------------
 
 save_chart <- function(plot, name, size = "standard") {
@@ -538,8 +547,10 @@ save_chart <- function(plot, name, size = "standard") {
     size,
     standard = SIZE_STANDARD,
     long     = SIZE_LONG,
+    tall     = SIZE_TALL,
     xlong    = SIZE_XLONG,
-    stop("Unknown size: ", size, ". Use 'standard', 'long', or 'xlong'.")
+    wide     = SIZE_WIDE,
+    stop("Unknown size: ", size, ". Use 'standard', 'long', or 'tall'.")
   )
   
   dir.create("final_charts", showWarnings = FALSE)

@@ -227,6 +227,114 @@ sec_axis_scaled <- function(scale_factor, name, labels = waiver()) {
   )
 }
 
+# ---- Block-arrow chart helper -------------------------------
+# Fat block arrows growing up (positive) or down (negative) from a
+# y = 0 baseline, one per row. Vertex builder for a single arrow set.
+arrow_polygons <- function(df, x_col, len_col,
+                           head_len   = 2.2,
+                           head_frac  = NULL,   # set to override head_len with a fraction
+                           shaft_half = 0.07,
+                           head_half  = 0.16) {
+  cx <- as.numeric(dplyr::pull(df, {{ x_col }}))
+  h  <- dplyr::pull(df, {{ len_col }})
+  id <- seq_len(nrow(df))
+  
+  verts <- purrr::pmap(
+    list(id = id, cx = cx, h = h),
+    function(id, cx, h) {
+      mag <- abs(h)
+      hl  <- if (!is.null(head_frac)) mag * head_frac else head_len
+      hl  <- min(hl, mag * 0.85)        # head never exceeds 85% of the arrow
+      st  <- sign(h) * (mag - hl)        # y where the head starts
+      tibble(
+        .aid = id,
+        vx = c(cx - shaft_half, cx - shaft_half, cx - head_half, cx,
+               cx + head_half,  cx + shaft_half, cx + shaft_half),
+        vy = c(0, st, st, h, st, st, 0)
+      )
+    }
+  ) %>%
+    bind_rows()
+  
+  verts %>%
+    left_join(mutate(df, .aid = id), by = ".aid")
+}
+
+# Full layer set for a block-arrow chart. Drawn length is a compressed
+# transform of the value (exponent < 1 stretches small arrows, squashes
+# big ones) so +/-1% still renders a complete arrow, matching the
+# non-linear Excel original. Labels carry the TRUE values. Returns a
+# list of layers; add to ggplot() with labs + theme_arrows().
+block_arrow_layers <- function(df, category_col, value_col, fills,
+                               divider_after = NULL,
+                               exponent    = 0.46,
+                               length_mult = 3.5,
+                               label_fmt   = function(v) sprintf("%+d%%", v),
+                               head_len    = 2.2,
+                               shaft_half  = 0.07,
+                               head_half   = 0.16,
+                               label_gap   = 1.3,
+                               pad         = 3,
+                               x_spacing   = 1,      # <1 packs categories closer
+                               x_expand    = 0.08,   # was 0.6: outer whitespace
+                               base_over   = 0.3) {  # was 0.45: baseline stub past ends
+  d <- df %>%
+    mutate(
+      .cat  = {{ category_col }},
+      .val  = {{ value_col }},
+      .x    = as.integer(factor(.cat, levels = levels(.cat) %||% unique(.cat))) * x_spacing,
+      .draw = sign(.val) * abs(.val)^exponent * length_mult
+    )
+  
+  poly <- arrow_polygons(d, .x, .draw,
+                         head_len   = head_len,
+                         shaft_half = shaft_half,
+                         head_half  = head_half)
+  
+  labs_df <- d %>%
+    mutate(.lab   = label_fmt(.val),
+           .lab_y = .draw + sign(.draw) * label_gap)
+  
+  y_hi <- max(d$.draw) + pad
+  y_lo <- min(d$.draw) - pad
+  
+  divider <- if (!is.null(divider_after)) {
+    list(annotate("segment",
+                  x = (divider_after + 0.5) * x_spacing,
+                  xend = (divider_after + 0.5) * x_spacing,
+                  y = y_lo, yend = y_hi,
+                  linetype = "dotted", color = "grey55", linewidth = 0.4))
+  } else list()
+  
+  c(
+    divider,
+    list(
+      geom_polygon(data = poly,
+                   aes(vx, vy, group = .aid, fill = .cat)),
+      geom_segment(aes(x = min(.x) - base_over, xend = max(.x) + base_over,
+                       y = 0, yend = 0),
+                   data = d, color = "grey10", linewidth = 1.4),
+      geom_label(data = d,
+                 aes(x = .x, y = 0, label = .cat),
+                 fill = "white", label.size = NA,
+                 label.padding = unit(5, "pt"),
+                 color = "grey20", family = FONT_FAMILY,
+                 size = AXIS_SIZE / .pt),
+      geom_text(data = labs_df,
+                aes(x = .x, y = .lab_y, label = .lab, color = .cat),
+                fontface = "bold", family = FONT_FAMILY,
+                size = DATA_LABEL_SIZE / .pt),
+      scale_fill_manual(values = fills),
+      scale_color_manual(values = fills),
+      scale_x_continuous(breaks = NULL,
+                         expand = expansion(add = c(x_expand, x_expand))),
+      scale_y_continuous(expand = expansion(mult = c(0, 0))),
+      coord_cartesian(ylim = c(y_lo, y_hi), clip = "off"),
+      guides(fill = "none", color = "none")
+    )
+  )
+}
+
 # ---- Stacked-bar charts -------------------------------------
 
 geom_col_stacked <- function(width = 0.7, alpha = ALPHA_COL) {

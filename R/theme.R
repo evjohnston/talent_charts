@@ -10,6 +10,8 @@ DATA_DIR    <- "data"
 # ---- Chart size presets -------------------------------------
 SIZE_STANDARD <- list(w = 8.0, h = 5.5)
 SIZE_LONG     <- list(w = 8.0, h = 11.0)
+SIZE_TALL     <- list(w = 6.0, h = 8.0)
+SIZE_WIDE     <- list(w = 12.0, h = 5.5)
 SIZE_XLONG    <- list(w = 8.0, h = 22.0)
 CHART_MARGIN  <- 0.15
 TABLE_DPI     <- 175
@@ -88,6 +90,14 @@ tpa_colors <- c(
   "#5D4738", "#918881", "#B9B4AC"
 )
 
+arrow_fill <- c(
+  "Total"         = tpa_colors[1],  
+  "Undergraduate" = tpa_colors[2],
+  "Graduate"      = tpa_colors[3],
+  "Non-Degree"    = tpa_colors[4],
+  "OPT"           = tpa_colors[5]
+)
+
 # Named single-use hex values
 TPA_NAVY_DARK <- "#1F3D52"   # darkest navy, used in mobility gradient
 TPA_RED_MID   <- "#C46C5D"   # mid red, used in mobility gradient
@@ -99,6 +109,17 @@ level_colors <- c(
   "Doctorate" = "#8C1515",
   "All Doctorates (IPEDS)" = "#8C1515",
   "Research Doctorates (SED)" = "#92A045"
+)
+
+acad_level_colors <- c(
+  "Bachelors"              = tpa_colors[3],
+  "Masters"                = tpa_colors[2],
+  "Doctorate"              = tpa_colors[1],
+  "OPT"                    = tpa_colors[4],
+  "Associates"             = tpa_colors[5],
+  "Non-degree"             = tpa_colors[6],
+  "Graduate (unspecified)" = tpa_colors[7],
+  "Professional"           = tpa_colors[8]
 )
 
 navy_tints <- c(
@@ -393,5 +414,62 @@ theme_donut <- function() {
       axis.ticks  = element_blank(),
       panel.grid  = element_blank(),
       legend.position = "bottom"
+    )
+}
+
+# ---- Block-arrow variant ------------------------------------
+theme_arrows <- function() {
+  theme_tpa() +
+    theme(
+      axis.title = element_blank(),
+      axis.text  = element_blank(),
+      axis.text.x = element_blank(),   # theme_tpa sets this separately; override it
+      axis.ticks = element_blank(),
+      axis.line  = element_blank(),
+      panel.grid = element_blank()
+    )
+}
+
+# ---- Cleveland dot-plot variant -----------------------------
+theme_dotplot <- function() {
+  theme_tpa() +
+    theme(
+      axis.title   = element_blank(),
+      axis.text.x  = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.line.x  = element_blank(),
+      axis.line.y  = element_blank(),
+      axis.ticks.y = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.major.y = element_line(color = "grey92", linewidth = 0.3),
+      axis.text.y = element_text(
+        family = FONT_FAMILY, color = "grey25", size = AXIS_SIZE,
+        lineheight = 0.9, margin = margin(r = 8)     # smaller r = labels closer to panel
+      ),
+      legend.justification = "right"
+    )
+}
+
+# ---- Bullet / progress-bar variant --------------------------
+theme_bullet <- function() {
+  theme_tpa() +
+    theme(
+      axis.title  = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks  = element_blank(),
+      axis.line   = element_blank(),
+      panel.grid  = element_blank(),
+      axis.text.y = element_text(
+        family = FONT_FAMILY, color = "grey25",
+        size = AXIS_SIZE, lineheight = 0.9
+      ),
+      strip.text = element_text(
+        family = FONT_FAMILY, face = "bold",
+        size = TITLE_SIZE, color = "grey15",
+        hjust = 0.5, margin = margin(b = 0)
+      ),
+      strip.background = element_blank(),
+      panel.spacing.x  = unit(28, "pt"),
+      legend.position  = "none"
     )
 }
