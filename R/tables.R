@@ -396,6 +396,186 @@ build_eb_table <- function(name, meta) {
     save_table(name)
 }
 
+# ---- Field-share change table -------------------------------
+# Used by tab 008.
+# Takes an already-assembled wide df with Country plus, for each field
+# label, {label}_First / {label}_Last / {label}_Change columns
+# (First = 2009 share, Last = 2024 share, Change = relative change).
+# field_labels is the character vector of spanner labels (also the
+# column-name prefixes). Each Change column gets its own symmetric
+# color domain because per-field change magnitudes differ a lot.
+
+build_field_share_table <- function(df, name, meta, field_labels) {
+  change_cols <- paste0(field_labels, "_Change")
+  value_cols  <- c(paste0(field_labels, "_First"),
+                   paste0(field_labels, "_Last"))
+  
+  tbl <- df %>%
+    gt(rowname_col = "Country", id = name) %>%
+    fmt_number(columns = ends_with("_First"),  decimals = 1, pattern = "{x}%") %>%
+    fmt_number(columns = ends_with("_Last"),   decimals = 1, pattern = "{x}%") %>%
+    fmt_number(columns = ends_with("_Change"),
+               decimals = 1, force_sign = TRUE, pattern = "{x}%") %>%
+    sub_missing(missing_text = "—")
+  
+  for (lab in field_labels) {
+    tbl <- tbl %>%
+      tab_spanner(label = lab, columns = starts_with(paste0(lab, "_")))
+  }
+  
+  tbl <- tbl %>%
+    cols_label(
+      ends_with("_First")  ~ "2009",
+      ends_with("_Last")   ~ "2024",
+      ends_with("_Change") ~ "Change"
+    )
+  
+  # per-field diverging gradient: blue (decline) -> white (0) -> red (rise)
+  for (col in change_cols) {
+    lim <- max(abs(df[[col]]), na.rm = TRUE)
+    tbl <- tbl %>%
+      data_color(
+        columns = all_of(col),
+        fn = scales::col_numeric(
+          palette = c(tpa_colors[2], "white", tpa_colors[1]),
+          domain  = c(-lim, lim)
+        )
+      )
+  }
+  
+  tbl %>%
+    tab_style(
+      style     = cell_fill(color = "white"),
+      locations = cells_body(columns = all_of(value_cols))
+    ) %>%
+    cols_align(align = "right", columns = -Country) %>%
+    tab_style(
+      style     = cell_text(weight = "bold"),
+      locations = cells_body(columns = all_of(change_cols))
+    ) %>%
+    cols_width(
+      Country              ~ px(150),
+      ends_with("_First")  ~ px(72),
+      ends_with("_Last")   ~ px(72),
+      ends_with("_Change") ~ px(88)
+    ) %>%
+    tab_footnote(
+      footnote = paste(
+        "Values are the share of each origin country's international students",
+        "enrolled in the given field in 2009 and 2024, and the relative change",
+        "between the two years. Countries are sorted by total international",
+        "student enrollment, with the largest first."
+      ),
+      locations = cells_column_spanners(spanners = field_labels)
+    ) %>%
+    theme_gt_tpa(meta = meta) %>%
+    opt_css(css = sprintf(
+      "#%s .gt_column_spanner { border-bottom-color: %s !important; }",
+      name, tpa_colors[1]
+    )) %>%
+    save_table(name, size = "long")
+}
+
+
+build_citizenship_table <- function(df, name, meta,
+                                    first_year, last_year,
+                                    footnote = NULL,
+                                    value_is_share = FALSE,
+                                    share_group = FALSE) {
+  
+  change_cols <- c("USC_Change", "TVH_Change")
+  value_cols  <- c("USC_First", "USC_Last", "TVH_First", "TVH_Last")
+  if (share_group) {
+    change_cols <- c(change_cols, "SHR_Change")
+    share_vals  <- c("SHR_First", "SHR_Last")
+  }
+  
+  tbl <- df %>%
+    gt(rowname_col = "Field", id = name)
+  
+  if (value_is_share) {
+    tbl <- tbl %>% fmt_number(columns = all_of(value_cols), decimals = 1, pattern = "{x}%")
+  } else {
+    tbl <- tbl %>% fmt_integer(columns = all_of(value_cols))
+  }
+  if (share_group) {
+    tbl <- tbl %>% fmt_number(columns = all_of(share_vals), decimals = 1, pattern = "{x}%")
+  }
+  
+  tbl <- tbl %>%
+    fmt_number(columns = all_of(change_cols),
+               decimals = 1, force_sign = TRUE, pattern = "{x}%") %>%
+    tab_spanner(label = "U.S. citizens & permanent residents",
+                columns = c(USC_First, USC_Last, USC_Change)) %>%
+    tab_spanner(label = "Temporary visa holders",
+                columns = c(TVH_First, TVH_Last, TVH_Change))
+  
+  if (share_group) {
+    tbl <- tbl %>%
+      tab_spanner(label = "International share",
+                  columns = c(SHR_First, SHR_Last, SHR_Change))
+  }
+  
+  tbl <- tbl %>%
+    cols_label(
+      USC_First = as.character(first_year), USC_Last = as.character(last_year),
+      USC_Change = "Change",
+      TVH_First = as.character(first_year), TVH_Last = as.character(last_year),
+      TVH_Change = "Change"
+    )
+  if (share_group) {
+    tbl <- tbl %>%
+      cols_label(
+        SHR_First = as.character(first_year), SHR_Last = as.character(last_year),
+        SHR_Change = "Change"
+      )
+  }
+  
+  # per-group symmetric diverging gradient on each change column
+  for (col in change_cols) {
+    lim <- max(abs(df[[col]]), na.rm = TRUE)
+    tbl <- tbl %>%
+      data_color(
+        columns = all_of(col),
+        fn = scales::col_numeric(
+          palette = c(tpa_colors[2], "white", tpa_colors[1]),
+          domain  = c(-lim, lim)
+        )
+      )
+  }
+  
+  white_cols <- value_cols
+  if (share_group) white_cols <- c(white_cols, share_vals)
+  
+  tbl <- tbl %>%
+    tab_style(style = cell_fill(color = "white"),
+              locations = cells_body(columns = all_of(white_cols))) %>%
+    cols_align(align = "right", columns = -Field) %>%
+    tab_style(style = cell_text(weight = "bold"),
+              locations = cells_body(columns = all_of(change_cols))) %>%
+    cols_width(
+      Field                ~ px(210),
+      ends_with("_First")  ~ px(64),
+      ends_with("_Last")   ~ px(64),
+      ends_with("_Change") ~ px(82)
+    )
+  
+  if (!is.null(footnote)) {
+    spanners <- c("U.S. citizens & permanent residents", "Temporary visa holders")
+    if (share_group) spanners <- c(spanners, "International share")
+    tbl <- tbl %>%
+      tab_footnote(footnote = footnote,
+                   locations = cells_column_spanners(spanners = spanners))
+  }
+  
+  tbl %>%
+    theme_gt_tpa(meta = meta) %>%
+    opt_css(css = sprintf(
+      "#%s .gt_column_spanner { border-bottom-color: %s !important; }",
+      name, tpa_colors[1])) %>%
+    save_table(name, size = "long")
+}
+
 # ---- Export -------------------------------------------------
 
 save_table <- function(gt_tbl, name, size = "standard") {

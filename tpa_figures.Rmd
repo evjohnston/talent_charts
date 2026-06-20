@@ -557,7 +557,7 @@ fig_013 <- ggplot(df_013, aes(Year, Count, color = Country, group = Country)) +
     direction    = "y",
     with_segment = TRUE
   ) +
-  scale_x_years(df_013$Year, pad_right = PAD_RIGHT_NARROW) +
+  scale_x_years(df_013$Year, pad_right = .3) +
   scale_y_log10(labels = label_comma(),
                 breaks = c(1000, 5000, 10000, 50000, 100000, 250000),
                 expand = EXPAND_LINE) +
@@ -592,7 +592,7 @@ fig_014 <- ggplot(df_014, aes(Year, Count, color = Field, group = Field)) +
     direction    = "y",
     with_segment = TRUE
   ) +
-  scale_x_years(df_014$Year, pad_right = PAD_RIGHT_WIDE) +
+  scale_x_years(df_014$Year, pad_right = .5) +
   scale_y_continuous(labels = label_comma(),
                      expand = EXPAND_LINE) +
   scale_color_tpa() +
@@ -3586,6 +3586,294 @@ fig_107 <- ggplot(df_107, aes(y = Country)) +
 
 save_chart(fig_107, "fig_107")
 ```
+# Figure 108 - Top 10 countries by international undergraduate enrollment (count)
+```{r 108}
+meta <- get_meta("fig_108")
+
+df_108 <- read_fig("fig_108") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Country", values_to = "Count") %>%
+  filter(!is.na(Count))
+
+top_countries <- df_108 %>%
+  filter(Year == max(Year)) %>%
+  slice_max(Count, n = 8) %>%
+  pull(Country)
+
+df_108 <- df_108 %>%
+  filter(Country %in% top_countries) %>%
+  order_by_latest(Country, Count)
+
+labels_108 <- last_by_group(df_108, Year, Country)
+
+fig_108 <- ggplot(df_108, aes(Year, Count, color = Country, group = Country)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_108,
+    mapping      = aes(label = paste0(Country, ": ", label_comma()(Count))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_108$Year, pad_right = .3) +
+  scale_y_continuous(labels = label_comma(),
+                breaks = c(1000, 5000, 10000, 50000, 100000, 250000),
+                expand = EXPAND_LINE) +
+  scale_color_tpa() +
+  guides(color = "none") +
+  labs_meta(meta, y = "Enrolled International Students") +
+  theme_tpa()
+
+save_chart(fig_108, "fig_108")
+```
+
+# Figure 109 - Top 10 countries by international undergraduate enrollment (share)
+```{r 109}
+meta <- get_meta("fig_109")
+
+df_109 <- read_fig("fig_109") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Country", values_to = "Count") %>%
+  filter(!is.na(Count))
+
+top_countries <- df_109 %>%
+  filter(Year == max(Year)) %>%
+  slice_max(Count, n = 8) %>%
+  pull(Country)
+
+df_109 <- df_109 %>%
+  filter(Country %in% top_countries) %>%
+  order_by_latest(Country, Count)
+
+labels_109 <- last_by_group(df_109, Year, Country)
+
+fig_109 <- ggplot(df_109, aes(Year, Count, color = Country, group = Country)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_109,
+    mapping      = aes(label = paste0(Country, ": ", label_percent(accuracy = 0.1)(Count))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_109$Year, pad_right = .3) +
+  scale_y_continuous(labels = label_percent(accuracy = 1),
+                expand = EXPAND_LINE) +
+  scale_color_tpa() +
+  guides(color = "none") +
+  labs_meta(meta, y = "Share of Enrolled International Students") +
+  theme_tpa()
+
+save_chart(fig_109, "fig_109")
+```
+
+# Figure 110 - Top 10 countries by international graduate enrollment (count)
+```{r 110}
+meta <- get_meta("fig_110")
+
+df_110 <- read_fig("fig_110") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Country", values_to = "Count") %>%
+  filter(!is.na(Count))
+
+top_countries <- df_110 %>%
+  filter(Year == max(Year)) %>%
+  slice_max(Count, n = 8) %>%
+  pull(Country)
+
+df_110 <- df_110 %>%
+  filter(Country %in% top_countries) %>%
+  order_by_latest(Country, Count)
+
+labels_110 <- last_by_group(df_110, Year, Country)
+
+fig_110 <- ggplot(df_110, aes(Year, Count, color = Country, group = Country)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_110,
+    mapping      = aes(label = paste0(Country, ": ", label_comma()(Count))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_110$Year, pad_right = .3) +
+  scale_y_continuous(labels = label_comma(),
+                expand = EXPAND_LINE) +
+  scale_color_tpa() +
+  guides(color = "none") +
+  labs_meta(meta, y = "Enrolled International Students") +
+  theme_tpa()
+
+save_chart(fig_110, "fig_110")
+```
+
+# Figure 111 - Top 10 countries by international graduate enrollment (share)
+```{r 111}
+meta <- get_meta("fig_111")
+
+df_111 <- read_fig("fig_111") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Country", values_to = "Count") %>%
+  filter(!is.na(Count))
+
+top_countries <- df_111 %>%
+  filter(Year == max(Year)) %>%
+  slice_max(Count, n = 8) %>%
+  pull(Country)
+
+df_111 <- df_111 %>%
+  filter(Country %in% top_countries) %>%
+  order_by_latest(Country, Count)
+
+labels_111 <- last_by_group(df_111, Year, Country)
+
+fig_111 <- ggplot(df_111, aes(Year, Count, color = Country, group = Country)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_111,
+    mapping      = aes(label = paste0(Country, ": ", label_percent(accuracy = 0.1)(Count))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_111$Year, pad_right = .3) +
+  scale_y_continuous(labels = label_percent(accuracy = 1),
+                expand = EXPAND_LINE) +
+  scale_color_tpa() +
+  guides(color = "none") +
+  labs_meta(meta, y = "Share of Enrolled International Students") +
+  theme_tpa()
+
+save_chart(fig_111, "fig_111")
+```
+
+# Figure 112 - What Share of Each Country's International Students Are Enrolled in Engineering?
+```{r fig_112}
+meta <- get_meta("fig_112")
+
+df_112 <- read_fig("fig_112") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Country", values_to = "Count") %>%
+  filter(!is.na(Count))
+
+top_countries <- df_112 %>%
+  filter(Year == max(Year)) %>%
+  slice_max(Count, n = 8) %>%
+  pull(Country)
+
+df_112 <- df_112 %>%
+  filter(Country %in% top_countries) %>%
+  order_by_latest(Country, Count)
+
+labels_112 <- last_by_group(df_112, Year, Country)
+
+fig_112 <- ggplot(df_112, aes(Year, Count, color = Country, group = Country)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_112,
+    mapping      = aes(label = paste0(Country, ": ", label_percent(accuracy = 0.1)(Count))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_112$Year, pad_right = .3) +
+  scale_y_continuous(labels = label_percent(accuracy = 1),
+                expand = EXPAND_LINE) +
+  scale_color_tpa() +
+  guides(color = "none") +
+  labs_meta(meta, y = "Share of Enrolled International Students") +
+  theme_tpa()
+
+save_chart(fig_112, "fig_112")
+```
+
+# Figure 113 - What Share of Each Country's International Students Are Enrolled in Math and Computer Science?
+```{r fig_113}
+meta <- get_meta("fig_113")
+
+df_113 <- read_fig("fig_113") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Country", values_to = "Count") %>%
+  filter(!is.na(Count))
+
+top_countries <- df_113 %>%
+  filter(Year == max(Year)) %>%
+  slice_max(Count, n = 8) %>%
+  pull(Country)
+
+df_113 <- df_113 %>%
+  filter(Country %in% top_countries) %>%
+  order_by_latest(Country, Count)
+
+labels_113 <- last_by_group(df_113, Year, Country)
+
+fig_113 <- ggplot(df_113, aes(Year, Count, color = Country, group = Country)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_113,
+    mapping      = aes(label = paste0(Country, ": ", label_percent(accuracy = 0.1)(Count))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_113$Year, pad_right = .3) +
+  scale_y_continuous(labels = label_percent(accuracy = 1),
+                expand = EXPAND_LINE) +
+  scale_color_tpa() +
+  guides(color = "none") +
+  labs_meta(meta, y = "Share of Enrolled International Students") +
+  theme_tpa()
+
+save_chart(fig_113, "fig_113")
+```
+
+# Figure 114 - What Share of Each Country's International Students Are Enrolled in Physical and Life Sciences?
+```{r fig_114}
+meta <- get_meta("fig_114")
+
+df_114 <- read_fig("fig_114") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Country", values_to = "Count") %>%
+  filter(!is.na(Count))
+
+top_countries <- df_114 %>%
+  filter(Year == max(Year)) %>%
+  slice_max(Count, n = 8) %>%
+  pull(Country)
+
+df_114 <- df_114 %>%
+  filter(Country %in% top_countries) %>%
+  order_by_latest(Country, Count)
+
+labels_114 <- last_by_group(df_114, Year, Country)
+
+fig_114 <- ggplot(df_114, aes(Year, Count, color = Country, group = Country)) +
+  geom_line(linewidth = LINE_WIDTH) +
+  geom_label_repel_tpa(
+    data         = labels_114,
+    mapping      = aes(label = paste0(Country, ": ", label_percent(accuracy = 0.1)(Count))),
+    nudge_x      = 0.5,
+    hjust        = 0,
+    direction    = "y",
+    with_segment = TRUE
+  ) +
+  scale_x_years(df_114$Year, pad_right = .3) +
+  scale_y_continuous(labels = label_percent(accuracy = 1),
+                expand = EXPAND_LINE) +
+  scale_color_tpa() +
+  guides(color = "none") +
+  labs_meta(meta, y = "Share of Enrolled International Students") +
+  theme_tpa()
+
+save_chart(fig_114, "fig_114")
+```
+
 
 # SPLIT
 
@@ -3645,7 +3933,220 @@ tab_006c
 tab_006d
 ```
 
----
+# Table 7 - Change (1995-2024) in Int. Share of STEM Degrees Awarded by Field - Bachelors
+```{r table 007}
+meta_007 <- get_meta("tab_007")
+
+tab_007 <- build_region_table(
+  name = "tab_007",
+  meta = meta_007
+)
+
+tab_007
+```
+
+# Table 8 - What Share of Each Country's International Students Are Enrolled in Key STEM Fields?
+```{r table 008}
+meta <- get_meta("tab_008")
+
+field_files <- c(
+  "Engineering"              = "fig_112",
+  "Math & Computer Science"  = "fig_113",
+  "Physical & Life Sciences" = "fig_114"
+)
+
+field_labels <- names(field_files)
+
+read_field_long <- function(name) {
+  read_fig(name) %>%
+    mutate(across(-Year, ~ suppressWarnings(as.numeric(na_if(as.character(.x), "-"))))) %>%
+    pivot_longer(-Year, names_to = "Country", values_to = "Share") %>%
+    filter(!is.na(Share))
+}
+
+long_all <- imap(field_files, ~ read_field_long(.x) %>% mutate(Field = .y)) %>%
+  bind_rows()
+
+summ <- long_all %>%
+  filter(Year %in% c(2009, 2024)) %>%
+  mutate(point = if_else(Year == 2009, "First", "Last")) %>%
+  select(Field, Country, point, Share) %>%
+  pivot_wider(names_from = point, values_from = Share) %>%
+  filter(!is.na(First), !is.na(Last)) %>%
+  mutate(First = First * 100, Last = Last * 100,
+         Change = (Last - First) / First * 100)
+
+# keep only countries with both 2009 and 2024 values in all three fields
+keep_countries <- summ %>% count(Country) %>% filter(n == 3) %>% pull(Country)
+summ <- summ %>% filter(Country %in% keep_countries)
+
+ord_cols <- as.vector(t(outer(field_labels, c("First", "Last", "Change"),
+                              paste, sep = "_")))
+
+country_order <- c(
+  "China",
+  "India",
+  "South Korea",
+  "Canada",
+  "Japan",
+  "Taiwan",
+  "Saudi Arabia",
+  "Mexico",
+  "Vietnam",
+  "Brazil",
+  "Turkey/Türkiye",
+  "Nigeria",
+  "United Kingdom",
+  "Germany",
+  "Hong Kong",
+  "Nepal",
+  "Indonesia",
+  "France",
+  "Colombia",
+  "Pakistan"
+)
+
+df_008 <- summ %>%
+  pivot_wider(
+    names_from  = Field,
+    values_from = c(First, Last, Change),
+    names_glue  = "{Field}_{.value}"
+  ) %>%
+  select(Country, all_of(ord_cols)) %>%
+  arrange(match(Country, country_order)) %>%
+  # ordered by mean field-share change; swap to e.g.
+  # arrange(desc(`Engineering_Last`)) to order by 2024 engineering share
+  mutate(.avg = rowMeans(across(ends_with("_Change")), na.rm = TRUE)) %>%
+  select(-.avg)
+
+build_field_share_table(df_008, "tab_008", meta, field_labels)
+```
+
+# Table 09 - 
+```{r tab_009}
+meta <- get_meta("tab_009")
+
+cite_files <- c(
+  "Science"     = "fig_015",
+  "Engineering" = "fig_016",
+  "Health"      = "fig_017"
+)
+
+read_cite_long <- function(name) {
+  read_fig(name) %>%
+    mutate(across(-Year, ~ suppressWarnings(as.numeric(na_if(as.character(.x), "-"))))) %>%
+    pivot_longer(-Year, names_to = "Group", values_to = "Count") %>%
+    filter(!is.na(Count))
+}
+
+long_all <- imap(cite_files, ~ read_cite_long(.x) %>% mutate(Field = .y)) %>%
+  bind_rows() %>%
+  mutate(Group = recode(Group,
+    "U.S. citizens and permanent residents" = "USC",
+    "Temporary visa holders"                = "TVH"))
+
+first_year <- min(long_all$Year, na.rm = TRUE)
+last_year  <- max(long_all$Year, na.rm = TRUE)
+
+# counts -> within-field citizenship share, per Field × Year
+shares <- long_all %>%
+  filter(Year %in% c(first_year, last_year)) %>%
+  group_by(Field, Year) %>%
+  mutate(Share = Count / sum(Count) * 100) %>%
+  ungroup()
+
+summ <- shares %>%
+  mutate(point = if_else(Year == first_year, "First", "Last")) %>%
+  select(Field, Group, point, Share) %>%
+  pivot_wider(names_from = point, values_from = Share) %>%
+  mutate(Change = (Last - First) / First * 100)   # relative change in share
+
+ord_cols <- as.vector(t(outer(c("USC", "TVH"),
+                              c("First", "Last", "Change"), paste, sep = "_")))
+
+field_order <- c("Science", "Engineering", "Health")
+
+df_009 <- summ %>%
+  pivot_wider(
+    names_from  = Group,
+    values_from = c(First, Last, Change),
+    names_glue  = "{Group}_{.value}"
+  ) %>%
+  select(Field, all_of(ord_cols)) %>%
+  arrange(match(Field, field_order))
+
+build_citizenship_table(df_009, "tab_009", meta,
+                        first_year = first_year, last_year = last_year,
+                        value_is_share = TRUE,
+                        footnote = paste(
+                          "Within-field citizenship share of U.S. graduate enrollment in",
+                          "science, engineering, and health. Change is the relative change",
+                          "in share between", first_year, "and", last_year, "."))
+```
+
+# Table 10 - 
+```{r table_010}
+meta <- get_meta("tab_010")
+
+phd_files <- c(
+  "USC" = "fig_018",
+  "TVH" = "fig_019"
+)
+
+read_phd_long <- function(name) {
+  read_fig(name) %>%
+    mutate(across(-Year, ~ suppressWarnings(as.numeric(na_if(as.character(.x), "-"))))) %>%
+    pivot_longer(-Year, names_to = "Field", values_to = "Count") %>%
+    filter(!is.na(Count)) %>%
+    mutate(Field = recode(Field, "Social Science" = "Social Sciences"))
+}
+
+long_all <- imap(phd_files, ~ read_phd_long(.x) %>% mutate(Group = .y)) %>%
+  bind_rows()
+
+first_year <- min(long_all$Year, na.rm = TRUE)
+last_year  <- max(long_all$Year, na.rm = TRUE)
+
+summ <- long_all %>%
+  filter(Year %in% c(first_year, last_year)) %>%
+  mutate(point = if_else(Year == first_year, "First", "Last")) %>%
+  select(Field, Group, point, Count) %>%
+  pivot_wider(names_from = point, values_from = Count) %>%
+  mutate(Change = (Last - First) / First * 100)
+
+# wide counts: USC_First/Last/Change, TVH_First/Last/Change
+counts_wide <- summ %>%
+  pivot_wider(
+    names_from  = Group,
+    values_from = c(First, Last, Change),
+    names_glue  = "{Group}_{.value}"
+  )
+
+# international share = TVH / (TVH + USC), per year, + relative change
+df_010 <- counts_wide %>%
+  mutate(
+    SHR_First  = TVH_First / (TVH_First + USC_First) * 100,
+    SHR_Last   = TVH_Last  / (TVH_Last  + USC_Last)  * 100,
+    SHR_Change = (SHR_Last - SHR_First) / SHR_First * 100
+  ) %>%
+  select(Field,
+         USC_First, USC_Last, USC_Change,
+         TVH_First, TVH_Last, TVH_Change,
+         SHR_First, SHR_Last, SHR_Change) %>%
+  arrange(Field == "Non-sciences", desc(TVH_Last))
+
+build_citizenship_table(df_010, "tab_010", meta,
+                        first_year = first_year, last_year = last_year,
+                        value_is_share = FALSE,
+                        share_group = TRUE,
+                        footnote = paste(
+                          "Research doctorate recipients by field and citizenship.",
+                          "Change is the percent change between", first_year, "and", last_year, ".",
+                          "International share is temporary visa holders as a percentage of",
+                          "all recipients in the field; its change is relative.",
+                          "Fields ordered by 2024 international count; non-sciences shown for comparison."))
+```
+
 
 # Export to PDF 
 ```{r export_pdf, include=FALSE}
