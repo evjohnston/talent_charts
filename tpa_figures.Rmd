@@ -4022,7 +4022,7 @@ df_008 <- summ %>%
 build_field_share_table(df_008, "tab_008", meta, field_labels)
 ```
 
-# Table 09 - 
+# Table 09 - International Share of U.S. Graduate Enrollment, by Field and Citizenship Status (1980–2024)
 ```{r tab_009}
 meta <- get_meta("tab_009")
 
@@ -4084,7 +4084,7 @@ build_citizenship_table(df_009, "tab_009", meta,
                           "in share between", first_year, "and", last_year, "."))
 ```
 
-# Table 10 - 
+# Table 10 - Research Doctorate Recipients, by Field and Citizenship Status (2014–2024)
 ```{r table_010}
 meta <- get_meta("tab_010")
 
