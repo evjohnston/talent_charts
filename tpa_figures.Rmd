@@ -216,6 +216,14 @@ save_chart(fig_005, "fig_005")
 ```{r figure 006, fig.height=10, fig.width=10}
 meta <- get_meta("fig_006")
 
+df_006 <- read_fig("fig_006") %>%
+  mutate(
+    Year   = as.numeric(Year),
+    Share  = as.numeric(NonresidentShare),
+    Degree = factor(Degree, levels = c("Bachelors", "Masters", "Doctorate"))
+  )
+
+
 fields_drop <- c(
   "Agricultural/Animal/Plant/Veterinary Science and Related Fields"
 )
@@ -574,7 +582,7 @@ save_chart(fig_013, "fig_013")
 meta <- get_meta("fig_014")
 
 df_014 <- read_fig("fig_014") %>%
-  select(-`Non STEM`) %>%
+  select(-`Non STEM`,-`Social Sciences`) %>%
   mutate(across(-Year, as.numeric)) %>%
   pivot_longer(-Year, names_to = "Field", values_to = "Count") %>%
   filter(!is.na(Count)) %>%
@@ -587,7 +595,7 @@ fig_014 <- ggplot(df_014, aes(Year, Count, color = Field, group = Field)) +
   geom_label_repel_tpa(
     data         = labels_014,
     mapping      = aes(label = paste0(Field, ": ", label_comma()(Count))),
-    nudge_x      = 0.5,
+    nudge_x      = 1,
     hjust        = 0,
     direction    = "y",
     with_segment = TRUE
@@ -633,7 +641,8 @@ meta <- get_meta("fig_018")
 df   <- read_country_lines("fig_018", group_col = "Field", value_col = "Count")
 fig  <- plot_country_lines(df, meta, "Doctorate recipients",
                            group_col   = "Field",
-                           color_scale = scale_color_fields())
+                           color_scale = scale_color_fields(),
+                           pad_right   = .6)
 save_chart(fig, "fig_018")
 ```
 
@@ -645,7 +654,7 @@ df   <- read_country_lines("fig_019", group_col = "Field", value_col = "Count") 
 fig  <- plot_country_lines(df, meta, "Doctorate recipients",
                            group_col   = "Field",
                            color_scale = scale_color_fields(),
-                           pad_right   = PAD_RIGHT_STANDARD)
+                           pad_right   = .6)
 save_chart(fig, "fig_019")
 ```
 
@@ -670,12 +679,12 @@ fig_020 <- ggplot(df_020, aes(Year, Share, color = Field, group = Field)) +
   geom_label_repel_tpa(
     data         = labels_020,
     mapping      = aes(label = paste0(Field, ": ", sprintf("%.1f%%", Share))),
-    nudge_x      = 0.5,
+    nudge_x      = 0.9,
     hjust        = 0,
     direction    = "y",
     with_segment = TRUE
   ) +
-  scale_x_years(df_020$Year, pad_right = PAD_RIGHT_NARROW) +
+  scale_x_years(df_020$Year, pad_right = .25) +
   scale_y_continuous(labels = label_number(suffix = "%"),
                      limits = c(0, 80),
                      breaks = seq(0, 80, 10),
@@ -744,7 +753,7 @@ df   <- read_country_lines("fig_023", group_col = "Region", value_col = "Count")
   filter(Region != "Stateless")
 fig  <- plot_country_lines(df, meta, "International scholars",
                            group_col = "Region",
-                           pad_right = PAD_RIGHT_STANDARD)
+                           pad_right = .6)
 save_chart(fig, "fig_023")
 ```
 
@@ -1019,29 +1028,76 @@ save_chart(fig_029, "fig_029")
 
 # Figure 30 - Top 15 Employers with NAICS Code 54 H-1B Visa Approvals
 ```{r figure 030}
+# ---- shared fig_030 prep ----
+# Full firm-level H-1B approvals (NAICS 54). Computes shares against
+# the annual Grand Total row, excludes the partial 2026 column.
+fig030_shares <- function() {
+  raw <- read_fig("fig_030")
+  names(raw) <- trimws(names(raw))
+
+  total_row <- raw %>% filter(trimws(Company) == "Grand Total")
+  totals <- total_row %>%
+    select(-Company, -`Grand Total`) %>%
+    pivot_longer(everything(), names_to = "Year", values_to = "Total") %>%
+    mutate(Year = as.integer(Year), Total = as.numeric(Total))
+
+  raw %>%
+    filter(!trimws(Company) %in% c("Grand Total")) %>%
+    mutate(Company = trimws(Company)) %>%
+    select(-`Grand Total`) %>%
+    pivot_longer(-Company, names_to = "Year", values_to = "Count") %>%
+    mutate(Year = as.integer(Year),
+           Count = as.numeric(replace_na(Count, 0))) %>%
+    filter(Year != 2026) %>%                     # drop partial year
+    left_join(totals, by = "Year") %>%
+    mutate(Share = Count / Total * 100)
+}
+
 meta <- get_meta("fig_030")
 
-df_030 <- read_fig("fig_030") %>%
-  select(1:11) %>%
-  mutate(across(-Year, as.numeric)) %>%
-  pivot_longer(-Year, names_to = "Company", values_to = "Count") %>%
-  filter(!is.na(Count)) %>%
-  order_by_latest(Company, Count)
+short_names <- c(
+  "COGNIZANT TECHNOLOGY SOLUTIONS US CORP"      = "Cognizant",
+  "TATA CONSULTANCY SERVICES LIMITED"           = "Tata",
+  "INFOSYS LIMITED"                             = "Infosys",
+  "GOOGLE INC"                                  = "Google",
+  "Deloitte and Subsidiaries"                   = "Deloitte",
+  "WIPRO LIMITED"                               = "WIPRO",
+  "ERNST & YOUNG LLP"                           = "Ernst & Young",
+  "TECH MAHINDRA AMERICAS INC"                  = "Tech Mahindra",
+  "HCL Technologies Limited and Subsidiaries"   = "HCL",
+  "CAPGEMINI AMERICA INC"                       = "Capgemini",
+  "LTIMINDTREE LIMITED"                         = "LTIMindtree",
+  "IBM and subsidiaries"                        = "IBM",
+  "LARSEN & TOUBRO INFOTECH LIMITED"            = "Larsen & Toubro"
+)
 
-palette_030 <- c(tpa_colors, "grey40")
+shares <- fig030_shares()
 
-fig_030 <- ggplot(df_030, aes(Year, Count, color = Company, group = Company)) +
-  geom_line(linewidth = LINE_WIDTH_DENSE) +
-  scale_x_years(df_030$Year, by = 2) +
-  scale_y_log10(labels = label_comma(),
-                breaks  = c(100, 500, 1000, 5000, 10000, 30000),
-                expand  = EXPAND_LINE) +
-  scale_color_manual(values = palette_030) +
-  guides(color = guide_legend(ncol = 3)) +
-  labs_meta(meta, y = "H-1B approvals") +
-  theme_tpa()
+# rank union firms by their max share across the two years, so the
+# biggest bars (Cognizant's 2017, Google's 2025) sit on the left
+df_bar <- shares %>%
+  filter(Year %in% c(2017, 2025), Company %in% names(short_names)) %>%
+  mutate(Company = recode(Company, !!!short_names),
+         Year = factor(Year))
 
-save_chart(fig_030, "fig_030")
+bar_order <- df_bar %>%
+  group_by(Company) %>% summarise(m = max(Share)) %>%
+  arrange(desc(m)) %>% pull(Company)
+
+df_bar <- df_bar %>% mutate(Company = factor(Company, levels = bar_order))
+
+fig_030a <- ggplot(df_bar, aes(Company, Share, fill = Year)) +
+  geom_col(position = position_dodge(width = BAR_WIDTH),
+           width = BAR_WIDTH, alpha = ALPHA_COL) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(0, 24), breaks = seq(0, 20, 5),
+                     expand = EXPAND_BAR) +
+  scale_fill_manual(values = c("2017" = tpa_colors[2], "2025" = tpa_colors[1])) +
+  labs_meta(meta, y = "Share of H-1B approvals (NAICS 54)") +
+  theme_tpa() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+save_chart(fig_030a, "fig_030")
 ```
 
 # Figure 31 - The Evolving Founder Demographics of the US-Based Forbes AI 50 Companies (2019–2025)
@@ -1135,68 +1191,52 @@ save_chart(fig_032, "fig_032")
 
 # Figure 33 - Founder Composition and Valuation of Forbes AI50 Startups
 ```{r figure 033}
+# Figure 33 - Founder Composition and Valuation of Forbes AI50 Startups
+fig033_data <- function() {
+  raw <- read_fig("fig_033")
+  names(raw) <- make.unique(names(raw))   # de-dupe the repeated headers
+  foreign <- raw %>%
+    transmute(Company,
+              Valuation = as.numeric(`Pitchbook Valuation`),
+              Origin = "Foreign-founded") %>%
+    filter(!is.na(Valuation))
+  domestic <- raw %>%
+    transmute(Company,
+              Valuation = as.numeric(`Pitchbook Valuation.1`),
+              Origin = "Domestic-founded") %>%
+    filter(!is.na(Valuation))
+  bind_rows(foreign, domestic) %>%
+    mutate(ValB = Valuation / 1e9)
+}
+
 meta <- get_meta("fig_033")
 
-raw_033 <- read_fig("fig_033")
+df_top <- fig033_data() %>%
+  slice_max(ValB, n = 25) %>%
+  mutate(Company = fct_reorder(Company, ValB))
 
-foreign_block <- raw_033 %>%
-  select(Company,
-         Year      = `Year Founded`,
-         Founders  = `No of Founders`,
-         Valuation = `Pitchbook Valuation`,
-         Group     = `Founder Makeup Binary`) %>%
-  filter(!is.na(Year))
-
-domestic_block <- raw_033 %>%
-  select(Company,
-         Year      = `Year Founded.1`,
-         Founders  = `No of Founders.1`,
-         Valuation = `Pitchbook Valuation.1`,
-         Group     = `Founder Makeup Binary.1`) %>%
-  filter(!is.na(Year))
-
-df_033 <- bind_rows(foreign_block, domestic_block) %>%
-  mutate(
-    Year      = as.integer(Year),
-    Founders  = as.numeric(Founders),
-    Valuation = as.numeric(Valuation) / 1e6,
-    Group     = case_when(
-      str_detect(Group, "Has a Confirmed")  ~ "Foreign founder or co-founder",
-      str_detect(Group, "Has No Confirmed") ~ "No foreign founder or co-founder"
-    )
-  ) %>%
-  filter(!is.na(Valuation))
-
-fig_033 <- ggplot(df_033, aes(Year, Valuation,
-                              size = Founders, fill = Group)) +
-  geom_point(shape = 21, color = "white", stroke = 0.3,
-             alpha = ALPHA_BUBBLE) +
-  scale_x_continuous(breaks = seq(2003, 2025, 2),
-                     expand = expansion(mult = c(0.02, 0.02))) +
-  scale_y_log10(labels = label_comma(),
-                breaks  = c(10, 100, 1000, 10000, 100000, 500000),
-                expand  = expansion(mult = c(0.05, 0.15))) +
-  scale_size_area(max_size = 16, breaks = c(1, 3, 5, 8, 11),
-                  name = "Founders") +
-  scale_fill_manual(values = c(
-    "Foreign founder or co-founder"    = tpa_colors[2],
-    "No foreign founder or co-founder" = tpa_colors[1]
-  ), name = NULL) +
-  guides(
-    fill = guide_legend(
-      override.aes = list(size = 5, alpha = 1, shape = 21, color = "white"),
-      order = 1
-    ),
-    size = guide_legend(
-      override.aes = list(shape = 21, fill = "grey50",
-                          color = "white", alpha = ALPHA_BUBBLE),
-      order = 2
-    )
-  ) +
-  coord_cartesian(clip = "off") +
-  labs_meta(meta, y = "Valuation (USD, millions, log scale)") +
-  theme_tpa() +
-  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+fig_033 <- ggplot(df_top, aes(ValB, Company, color = Origin)) +
+  geom_point(size = 3.2) +
+  scale_x_log10(labels = label_dollar(suffix = "B", accuracy = 1),
+                breaks = c(1, 3, 10, 30, 100, 300),
+                expand = expansion(mult = c(0.04, 0.08))) +
+  scale_color_manual(values = c("Foreign-founded"  = "#C46C5D",
+                                "Domestic-founded" = "#A6C5DE")) +
+  labs_meta(meta, y = NULL) +
+  labs(x = "Valuation (log scale)") +
+  theme_dotplot() +
+  theme(
+    panel.grid.major.y = element_line(color = "grey92", linewidth = 0.3),
+    # theme_dotplot blanks the x-axis (value is normally on each dot);
+    # this chart has no dot labels, so restore the axis and title it
+    axis.text.x  = element_text(family = FONT_FAMILY, color = "grey25",
+                                size = AXIS_SIZE, angle = 0, hjust = 0.5,
+                                margin = margin(t = 4)),
+    axis.ticks.x = element_line(color = "grey50", linewidth = 0.35),
+    axis.line.x  = element_line(color = "grey50", linewidth = 0.4),
+    axis.title.x = element_text(family = FONT_FAMILY, color = "grey25",
+                                size = AXIS_SIZE, margin = margin(t = 8))
+  )
 
 save_chart(fig_033, "fig_033")
 ```
@@ -1205,8 +1245,8 @@ save_chart(fig_033, "fig_033")
 ```{r figure 034}
 meta <- get_meta("fig_034")
 
-company_order <- c("DeepSeek", "Anthropic", "OpenAI", "DeepMind")
-category_order <- c("Competitor", "International", "Domestic")
+company_order <- c("Alphabet","Anthropic", "OpenAI", "Alibaba", "DeepSeek", "Moonshot")
+category_order <- c("Rest of World", "China", "United States")
 
 df_034 <- read_fig("fig_034") %>%
   rename(Company = 1) %>%
@@ -1219,9 +1259,9 @@ df_034 <- read_fig("fig_034") %>%
   )
 
 palette_034 <- c(
-  "Domestic"      = tpa_colors[2],
-  "International" = tpa_colors[1],
-  "Competitor"    = tpa_colors[3]
+  "United States"      = tpa_colors[2],
+  "China"              = tpa_colors[1],
+  "Rest of World"      = tpa_colors[3]
 )
 
 fig_034 <- ggplot(df_034, aes(Share, Company, fill = Affiliation)) +
@@ -1237,7 +1277,7 @@ fig_034 <- ggplot(df_034, aes(Share, Company, fill = Affiliation)) +
                      limits = c(0, 101),
                      expand = expansion(mult = c(0, 0))) +
   scale_fill_manual(values = palette_034,
-                    breaks = c("Domestic", "International", "Competitor")) +
+                    breaks = c("United States", "China", "Rest of World")) +
   labs_meta(meta, x = "Share of researchers") +
   theme_horizontal_bar()
 
@@ -1479,7 +1519,7 @@ fig  <- plot_country_lines(df, meta, "Share of U.S. students abroad",
                            value_col = "Share",
                            label_fmt = fmt_pct_1,
                            x_by      = 2,
-                           pad_right = PAD_RIGHT_STANDARD,
+                           pad_right = .6,
                            y_args    = list(
                              labels = label_number(suffix = "%"),
                              limits = c(0, 35),
@@ -3414,7 +3454,7 @@ fig_103 <- ggplot(df_103, aes(Year, Count, color = Level, group = Level)) +
                      expand = expansion(mult = c(0.02, 0.05))) +
   scale_color_manual(values = acad_level_colors) +
   guides(color = "none") +
-  labs_meta(meta, y = "International students enrolled") +
+  labs_meta(meta, y = "Share of International Enrollment (%)") +
   theme_tpa()
 
 save_chart(fig_103, "fig_103")
@@ -3874,9 +3914,156 @@ fig_114 <- ggplot(df_114, aes(Year, Count, color = Country, group = Country)) +
 save_chart(fig_114, "fig_114")
 ```
 
+# Figure 115 - Who Actually Works in STEM After Earning a STEM Degree?
+```{r}
+# shared prep -- combine US-born (fig_027) and foreign-born (fig_028)
+# into one long frame with a Population column
+prep_conversion <- function() {
+  read_one <- function(name, pop) {
+    read_fig(name) %>%
+      mutate(across(-Year, as.numeric)) %>%
+      pivot_longer(-Year, names_to = "Degree", values_to = "Rate") %>%
+      mutate(Rate = Rate * 100, Population = pop)
+  }
 
-# SPLIT
+  bind_rows(
+    read_one("fig_027", "U.S.-born"),
+    read_one("fig_028", "Foreign-born")
+  ) %>%
+    mutate(
+      Degree = recode(Degree,
+        "bachelors"    = "Bachelors",
+        "masters"      = "Masters",
+        "doctorates"   = "Doctorates",
+        "doctors"      = "Doctorates",
+        "professional" = "Professional"),
+      Degree = factor(Degree, levels = c("Doctorates", "Professional", "Masters", "Bachelors"))
+    )
+}
 
+meta <- get_meta("fig_115")
+
+first_yr <- 2003
+last_yr  <- 2023
+
+# long form: one row per Degree × Population × Year, with Year as a factor
+# so it can drive the open/filled shape legend
+df_db <- prep_conversion() %>%
+  filter(Year %in% c(first_yr, last_yr)) %>%
+  mutate(Year = factor(Year, levels = c(first_yr, last_yr)))
+
+# wide, just for the connecting segments
+df_seg <- df_db %>%
+  select(Degree, Population, Year, Rate) %>%
+  pivot_wider(names_from = Year, values_from = Rate, names_prefix = "Y")
+
+fig_db <- ggplot(df_db, aes(y = Degree)) +
+  geom_segment(data = df_seg,
+               aes(x = Y2003, xend = Y2023, yend = Degree, color = Population),
+               linewidth = 1.1, alpha = 0.55) +
+  # both years drawn as shape 21; Year drives fill via the shape legend
+  geom_point(aes(x = Rate, color = Population, shape = Year),
+             fill = "white", stroke = 1.2, size = 3.8) +
+  geom_point(data = filter(df_db, Year == last_yr),
+             aes(x = Rate, color = Population, fill = Population),
+             shape = 21, stroke = 0, size = 4) +
+  scale_x_continuous(labels = label_number(suffix = "%"),
+                     limits = c(20, 85), breaks = seq(20, 80, 10),
+                     expand = expansion(mult = c(0.05, 0.10))) +
+  scale_color_manual(values = c("U.S.-born"    = tpa_colors[2],
+                                "Foreign-born" = tpa_colors[1])) +
+  scale_fill_manual(values = c("U.S.-born"    = tpa_colors[2],
+                               "Foreign-born" = tpa_colors[1]),
+                    guide = "none") +
+  scale_shape_manual(values = c("2003" = 21, "2023" = 19),
+                     labels = c("2003" = "2003 (open)", "2023" = "2023 (filled)")) +
+  guides(
+    color = guide_legend(order = 1, override.aes = list(shape = 19, size = 4)),
+    shape = guide_legend(order = 2,
+                         override.aes = list(color = "grey40", fill = "white"))
+  ) +
+  labs_meta(meta, y = NULL) +
+  theme_horizontal_bar()
+
+save_chart(fig_db, "fig_115")
+```
+
+# Figure 116 - Top-10 H1B Visa Granted Firms Share Over time
+```{r fig_116}
+meta <- get_meta("fig_116")
+
+# true top-10-by-year share: rank all firms each year, sum the top 10
+df_116 <- fig030_shares() %>%
+  group_by(Year) %>%
+  slice_max(Count, n = 10) %>%
+  summarise(value = sum(Share), .groups = "drop") %>%
+  mutate(Year = as.numeric(Year))
+
+labels <- first_last_peak(df_116, Year, value) %>%
+  mutate(hj = dplyr::case_when(
+    Year == min(df_116$Year) ~ -0.4,   # first point: label to the RIGHT (inward)
+    Year == max(df_116$Year) ~  1.3,   # last point:  label to the LEFT (inward)
+    TRUE                       ~  0.5    # peak: stays centered
+  ))
+
+fig_116 <- ggplot(df_116, aes(Year, value)) +
+  geom_line(color = tpa_colors[1], linewidth = LINE_WIDTH) +
+  geom_point(data = labels, color = tpa_colors[1], size = POINT_SIZE) +
+  # peak label: house wrapper, centered above the point
+  geom_text_tpa(data    = filter(labels, hj == .5),
+                mapping = aes(label = sprintf("%.1f%%", value)),
+                color   = tpa_colors[1],
+                vjust   = 1.5) +
+  # endpoint labels: nudged inward so they don't clip the panel edges
+  geom_text(data    = filter(labels, hj != 0.5),
+            mapping = aes(label = sprintf("%.1f%%", value), hjust = hj),
+            color   = tpa_colors[1], fontface = "bold",
+            family  = FONT_FAMILY, size = DATA_LABEL_SIZE / .pt) +
+  scale_x_years(df_116$Year, by = 1) +
+  scale_y_continuous(labels = label_number(suffix = "%"),
+                     limits = c(50, 75),
+                     breaks = seq(50, 75, 5),
+                     expand = EXPAND_BAR_TALL) +
+  labs_meta(meta, y = "Top 10 employers' share of approvals") +
+  theme_tpa()
+
+save_chart(fig_116, "fig_116")
+```
+
+# Figure 117 - How Does Founder Origin Vary Across AI Startup Valuations?
+```{r fig_117}
+meta <- get_meta("fig_117")
+
+tier_levels  <- c("≥$100B", "$10–100B", "$1–10B", "<$1B")
+origin_colors <- c("Foreign-founded"  = tpa_colors[1],
+                   "Domestic-founded" = tpa_colors[2])
+
+df_tier <- fig033_data() %>%
+  mutate(Tier = case_when(
+    ValB >= 100 ~ "≥$100B",
+    ValB >= 10  ~ "$10–100B",
+    ValB >= 1   ~ "$1–10B",
+    TRUE        ~ "<$1B"
+  )) %>%
+  count(Tier, Origin) %>%
+  mutate(Tier = factor(Tier, levels = tier_levels))
+
+fig_117 <- ggplot(df_tier, aes(Tier, n, fill = Origin)) +
+  geom_col(position = position_dodge(width = BAR_WIDTH),
+           width = BAR_WIDTH, alpha = ALPHA_COL) +
+  geom_text(aes(label = n, color = Origin),
+            position = position_dodge(width = BAR_WIDTH),
+            vjust = -0.4, size = DATA_LABEL_SIZE / .pt,
+            fontface = "bold", show.legend = FALSE) +
+  scale_y_continuous(expand = EXPAND_BAR_TALL) +
+  scale_fill_manual(values = origin_colors) +
+  scale_color_manual(values = origin_colors) +
+  labs_meta(meta, y = "Number of companies") +
+  theme_tpa() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+save_chart(fig_117, "fig_117")
+```
 
 # Table 1 - US Universities Count in Top Universities Over Time
 ```{r table 1}
@@ -4147,6 +4334,118 @@ build_citizenship_table(df_010, "tab_010", meta,
                           "Fields ordered by 2024 international count; non-sciences shown for comparison."))
 ```
 
+# Table 11 - Temporary visa holder share of employment by occupation, 2017 / 2021 / 2023 
+```{r}
+meta <- get_meta("tab_011")
+
+short_names <- c(
+  "Biological, agricultural, and other life scientists" = "Biological scientists",
+  "Computer and mathematical scientists"                = "Computer/math scientists",
+  "Physical and related scientists"                     = "Physical scientists",
+  "Social and related scientists"                        = "Social scientists",
+  "Engineers"                                            = "Engineers",
+  "S&E-related occupations"                               = "S&E-related occupations",
+  "Non-S&E occupations"                                   = "Non-S&E occupations"
+)
+
+row_order <- c("Computer/math scientists", "Engineers", "Biological scientists",
+               "Physical scientists", "Social scientists",
+               "S&E-related occupations", "Non-S&E occupations")
+
+df_011 <- read_fig("tab_011") %>%
+  mutate(across(-Year, as.numeric)) %>%
+  pivot_longer(-Year, names_to = "Occupation", values_to = "Rate") %>%
+  filter(!is.na(Rate), Year %in% c(2017, 2019, 2021, 2023)) %>%
+  mutate(Rate = Rate * 100,
+         Occupation = recode(Occupation, !!!short_names)) %>%
+  pivot_wider(names_from = Year, values_from = Rate, names_prefix = "Y") %>%
+  mutate(
+    Chg2019 = (Y2019 - Y2017) / Y2017 * 100,
+    Chg2021 = (Y2021 - Y2019) / Y2019 * 100,
+    Chg2023 = (Y2023 - Y2021) / Y2021 * 100,
+    Change  = (Y2023 - Y2017) / Y2017 * 100,
+    Occupation = factor(Occupation, levels = row_order)
+  ) %>%
+  arrange(Occupation) %>%
+  select(Occupation, Y2017, Chg2019, Chg2021, Chg2023, Y2023, Change)
+
+tab_011 <- build_occupation_share_table(
+  df_011, "tab_011", meta,
+  level_cols = c("Y2017", "Y2023"),
+  chg_cols   = c("Chg2019", "Chg2021", "Chg2023")
+)
+
+tab_011
+```
+
+
+# Table 12 - Top H1B Visa Employers in 2017 and 2025
+```{r tab_012}
+meta <- get_meta("tab_012")
+
+shares <- fig030_shares()
+
+# union of firms that were top-10 in EITHER year
+union_firms <- shares %>%
+  filter(Year %in% c(2017, 2025)) %>%
+  group_by(Year) %>%
+  slice_max(Count, n = 10) %>%
+  ungroup() %>%
+  distinct(Company) %>%
+  pull(Company)
+
+wide <- shares %>%
+  filter(Year %in% c(2017, 2025), Company %in% union_firms) %>%
+  select(Company, Year, Share) %>%
+  pivot_wider(names_from = Year, values_from = Share, names_prefix = "Y")
+
+df_012 <- wide %>%
+  mutate(
+    Company = recode(Company, !!!short_names),
+    Y1 = Y2017, Y2 = Y2025,
+    Change = if_else(Y2017 > 0, (Y2025 - Y2017) / Y2017 * 100, NA_real_)
+  ) %>%
+  arrange(desc(Change)) %>%          # order by 2025 share (today's leaders first)
+  select(Company, Y1, Y2, Change)
+
+tab_012 <- build_h1b_top10_table(df_012, "tab_012", meta,
+                                 first_year = 2017, last_year = 2025)
+tab_012
+```
+
+# Table 13 
+```{r tab_013}
+meta <- get_meta("tab_013")
+
+# short row labels -- the raw CSV categories are very long
+short_cats <- c(
+  "Employed in the U.S. Labor Force in a STEM Occupation Directed Related to Science and Engineering"   = "STEM, directly S&E-related",
+  "Employed in the U.S. Labor Force in a STEM Occupation Indirectly Related to Science and Engineering" = "STEM, indirectly S&E-related",
+  "Employed in the U.S. Labor Force in a STEM Occupation with a STEM middle skill"                      = "STEM, middle-skill",
+  "Employed in the U.S. Labor Force in a non-STEM Occupation"                                            = "Non-STEM occupation",
+  "Unemployed in the U.S. Labor Force"                                                                   = "Unemployed",
+  "Not in the U.S. labor force"                                                                          = "Not in labor force",
+  "Total"                                                                                                = "Total"
+)
+
+row_order <- c("STEM, directly S&E-related", "STEM, indirectly S&E-related",
+               "STEM, middle-skill", "Non-STEM occupation",
+               "Unemployed", "Not in labor force", "Total")
+
+df_013 <- read_fig("fig_025") %>%
+  mutate(
+    total_n = US_citizen + TPV,
+    Citizen = US_citizen / total_n * 100,
+    TVH     = TPV / total_n * 100,
+    Category = recode(Category, !!!short_cats),
+    Category = factor(Category, levels = row_order)
+  ) %>%
+  arrange(Category) %>%
+  select(Category, Citizen, TVH)
+
+tab_013 <- build_labor_citizenship_table(df_013, "tab_013", meta)
+tab_013
+```
 
 # Export to PDF 
 ```{r export_pdf, include=FALSE}

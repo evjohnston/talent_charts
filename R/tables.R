@@ -72,9 +72,9 @@ build_region_table <- function(name, meta) {
   
   region_cols <- c(
     "Asia",
-    "Africa, Sub-saharan",
+    "Africa, Sub-Saharan",
     "Europe",
-    "Latin America and Carribian",
+    "Latin America and Caribbean",
     "North America",
     "Oceania",
     "Middle East and North Africa"
@@ -211,6 +211,171 @@ build_region_table <- function(name, meta) {
     )) %>%
     save_table(name, size = "long")
   
+}
+
+# ---- STEM labor-force citizenship table ----------------------
+# Used by tab_013. Source is fig_025. One row per labor-force
+# category; columns are the U.S.-citizen/permanent-resident share
+# and the temporary-visa-holder share (they sum to 100%, so only
+# the temp-visa column carries information and gets the color scale).
+# Row ordering and the Total-last placement happen upstream.
+build_labor_citizenship_table <- function(df, name, meta) {
+  
+  # single continuous scale on the temp-visa share -- the meaningful
+  # number -- so the S&E-core vs. periphery contrast reads as color
+  df %>%
+    gt(rowname_col = "Category", id = name) %>%
+    fmt_number(columns = c(Citizen, TVH), decimals = 1, pattern = "{x}%") %>%
+    cols_label(Citizen = "U.S. citizen or\npermanent resident",
+               TVH     = "Temporary\nvisa holder") %>%
+    gt_color_rows(columns  = TVH,
+                  palette  = c(TPA_RED_LIGHT, tpa_colors[1]),
+                  pal_type = "continuous") %>%
+    cols_align(align = "right", columns = c(Citizen, TVH)) %>%
+    tab_style(style = cell_text(weight = "bold"),
+              locations = cells_body(columns = TVH)) %>%
+    tab_style(style = cell_text(align = "left"),
+              locations = cells_stub(rows = TRUE)) %>%
+    tab_footnote(
+      footnote = paste(
+        "Each row is the citizenship split within that labor-force category;",
+        "the two shares sum to 100%. Rows are ordered from occupations most",
+        "directly tied to science and engineering to those least tied, with",
+        "the overall total shown last."
+      ),
+      locations = cells_column_labels(columns = TVH)
+    ) %>%
+    theme_gt_tpa(meta = meta) %>%
+    save_table(name, size = "long")
+}
+
+# ---- H-1B top-10 employer table (union of both years) --------
+# Used by tab_012. One flat table of every firm that ranked top-10
+# in either the first or last year. Each row shows that firm's share
+# in both years plus the relative change. Built from a df with
+# Company, Y1, Y2, Change.
+build_h1b_top10_table <- function(df, name, meta, first_year, last_year) {
+  
+  chg_lim <- max(abs(df$Change), na.rm = TRUE)
+  
+  df %>%
+    gt(rowname_col = "Company", id = name) %>%
+    fmt_number(columns = c(Y1, Y2), decimals = 1, pattern = "{x}%") %>%
+    fmt_number(columns = Change, decimals = 1, force_sign = TRUE, pattern = "{x}%") %>%
+    sub_missing(columns = Change, missing_text = "new") %>%
+    cols_label(Y1 = as.character(first_year),
+               Y2 = as.character(last_year),
+               Change = "Change") %>%
+    data_color(
+      columns = Change,
+      fn = scales::col_numeric(
+        palette = c(tpa_colors[2], "white", tpa_colors[1]),
+        domain  = c(-chg_lim, chg_lim),
+        na.color = "white"
+      )
+    ) %>%
+    cols_align(align = "right", columns = c(Y1, Y2, Change)) %>%
+    tab_style(style = cell_text(weight = "bold"),
+              locations = cells_body(columns = Change)) %>%
+    tab_style(style = cell_text(align = "left"),
+              locations = cells_stub(rows = TRUE)) %>%
+    tab_footnote(
+      footnote = paste0("Share of all H-1B approvals in NAICS 54 (professional, ",
+                        "scientific, and technical services). Firms shown ranked ",
+                        "among the ten largest employers in ", first_year, " or ",
+                        last_year, ". Change is the relative change in share from ",
+                        first_year, " to ", last_year, "."),
+      locations = cells_column_labels(columns = Change)
+    ) %>%
+    theme_gt_tpa(meta = meta) %>%
+    save_table(name, size = "standard")
+}
+
+# ---- Occupation share table (bookends + year-over-year change) ----
+# Used by tab_011. Source data is fig_026. Takes a df already
+# pivoted wide with Occupation, raw shares for the first and last
+# year (level_cols, e.g. "Y2017", "Y2023"), year-over-year relative
+# change columns for the interior years (chg_cols, e.g. "Chg2019",
+# "Chg2021"), and a Change column (relative change, first to last
+# year). Year selection, recoding, and row ordering happen upstream
+# in the calculation chunk -- this function only builds and styles.
+build_occupation_share_table <- function(df, name, meta, level_cols, chg_cols) {
+  
+  all_chg_cols <- c(chg_cols, "Change")
+  span_order   <- c(level_cols[1], chg_cols, level_cols[2])
+  numeric_cols <- c(level_cols, all_chg_cols)   # every non-stub column
+  
+  level_labels <- setNames(gsub("^Y", "", level_cols), level_cols)
+  chg_labels   <- setNames(paste0(gsub("^Chg", "", chg_cols), " Δ"), chg_cols)
+  
+  # target table width, and column widths derived from it directly --
+  # Occupation gets a fixed wider allotment, remaining space splits
+  # evenly across every numeric column, so cols_width and table.width
+  # can never drift out of sync with each other
+  table_width_px <- SIZE_STANDARD$w * TABLE_DPI * 0.5 
+  occ_width_px   <- 260
+  num_width_px   <- (table_width_px - occ_width_px) / length(numeric_cols)
+  
+  tbl <- df %>%
+    gt(rowname_col = "Occupation", id = name) %>%
+    fmt_number(columns = all_of(level_cols), decimals = 1, pattern = "{x}%") %>%
+    fmt_number(columns = all_of(all_chg_cols), decimals = 1,
+               force_sign = TRUE, pattern = "{x}%") %>%
+    tab_spanner(label = "Temporary visa holder share",
+                columns = all_of(span_order)) %>%
+    cols_label(!!!level_labels, !!!chg_labels, Change = "Net Change")
+  
+  for (col in all_chg_cols) {
+    lim <- max(abs(df[[col]]), na.rm = TRUE)
+    tbl <- tbl %>%
+      data_color(
+        columns = all_of(col),
+        fn = scales::col_numeric(
+          palette = c(tpa_colors[2], "white", tpa_colors[1]),
+          domain  = c(-lim, lim)
+        )
+      )
+  }
+  
+  tbl <- tbl %>%
+    tab_style(
+      style     = cell_fill(color = "white"),
+      locations = cells_body(columns = all_of(level_cols))
+    ) %>%
+    tab_style(
+      style     = cell_text(align = "left"),
+      locations = cells_stub(rows = TRUE)
+    ) %>%
+    cols_align(align = "right", columns = c(all_of(level_cols), all_of(all_chg_cols))) %>%
+    cols_width(rlang::new_formula(quote(Occupation), rlang::expr(px(!!occ_width_px))))
+  
+  for (col in numeric_cols) {
+    tbl <- tbl %>%
+      cols_width(rlang::new_formula(rlang::sym(col), rlang::expr(px(!!num_width_px))))
+  }
+  
+  tbl %>%
+    tab_style(
+      style     = cell_text(weight = "bold"),
+      locations = cells_body(columns = Change)
+    ) %>%
+    tab_footnote(
+      footnote = paste(
+        "2017 is the temporary visa holder share of employment within each STEM",
+        "occupation category. 2019, 2021, and 2023 show the relative change from",
+        "the prior survey year rather than the share itself. Net Change is the",
+        "relative change in share from 2017 to 2023. Rows are ordered from",
+        "occupations most directly tied to science and engineering to those",
+        "least tied."
+      ),
+      locations = cells_column_spanners(spanners = "Temporary visa holder share")
+    ) %>%
+    theme_gt_tpa(meta = meta) %>%
+    opt_css(css = sprintf(
+      "#%s .gt_column_spanner { border-bottom-color: %s !important; }",
+      name, tpa_colors[1]
+    )) %>%
+    save_table(name, size = "standard")
 }
 
 # ---- Combined share-change table (all degrees) --------------
@@ -586,7 +751,8 @@ save_table <- function(gt_tbl, name, size = "standard") {
     standard = SIZE_STANDARD,
     long     = SIZE_LONG,
     xlong    = SIZE_XLONG,
-    stop("Unknown size: ", size, ". Use 'standard', 'long', or 'xlong'.")
+    short    = SIZE_SHORT,
+    stop("Unknown size: ", size, ". Use 'standard', 'long', 'xlong', 'short'.")
   )
   
   png_path  <- file.path("final_tables", paste0(name, ".png"))

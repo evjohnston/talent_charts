@@ -13,6 +13,7 @@ SIZE_LONG     <- list(w = 8.0, h = 11.0)
 SIZE_TALL     <- list(w = 6.0, h = 8.0)
 SIZE_WIDE     <- list(w = 12.0, h = 5.5)
 SIZE_XLONG    <- list(w = 8.0, h = 22.0)
+SIZE_SHORT    <- list(w = 8.0, h = 3.0)  
 CHART_MARGIN  <- 0.15
 TABLE_DPI     <- 175
 
