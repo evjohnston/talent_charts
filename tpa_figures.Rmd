@@ -4034,19 +4034,21 @@ save_chart(fig_116, "fig_116")
 ```{r fig_117}
 meta <- get_meta("fig_117")
 
-tier_levels  <- c("≥$100B", "$10–100B", "$1–10B", "<$1B")
+tier_levels  <- c("<$1B", "$1–10B", "$10–100B", "≥$100B")
 origin_colors <- c("Foreign-founded"  = tpa_colors[1],
                    "Domestic-founded" = tpa_colors[2])
 
-df_tier <- fig033_data() %>%
-  mutate(Tier = case_when(
-    ValB >= 100 ~ "≥$100B",
-    ValB >= 10  ~ "$10–100B",
-    ValB >= 1   ~ "$1–10B",
-    TRUE        ~ "<$1B"
-  )) %>%
-  count(Tier, Origin) %>%
-  mutate(Tier = factor(Tier, levels = tier_levels))
+df_tier <- read_fig("fig_117") %>%
+  rename(Origin = Binary) %>%
+  mutate(Origin = recode(Origin,
+    "Has All U.S. Born Founders"            = "Domestic-founded",
+    "Has At Least One Foreign-Born Founder" = "Foreign-founded")) %>%
+  pivot_longer(-Origin, names_to = "Tier", values_to = "n") %>%
+  mutate(
+    n    = replace_na(as.numeric(n), 0),          # blank ≥$100B cell -> 0
+    Tier = factor(Tier, levels = tier_levels),
+    Origin = factor(Origin, levels = c("Domestic-founded", "Foreign-founded"))
+  )
 
 fig_117 <- ggplot(df_tier, aes(Tier, n, fill = Origin)) +
   geom_col(position = position_dodge(width = BAR_WIDTH),
